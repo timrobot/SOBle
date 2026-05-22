@@ -45,7 +45,7 @@ class Tag16h5Bitmaps:
         self._src_corners = np.array([[0, r], [r, r], [r, 0], [0, 0]], dtype=np.float32)
 
     @classmethod
-    def instance(cls, resolution: int = 100) -> Tag16h5Bitmaps:
+    def instance(cls, resolution: int = 100):
         return cls(resolution)
 
     def bitmap_for_id(self, tag_id: int) -> np.ndarray | None:
