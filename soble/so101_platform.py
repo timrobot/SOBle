@@ -241,7 +241,7 @@ async def _ble_session(
                     break
                 payload = _pack_robot_command(left, right, arm)
                 assert len(payload) == CMD_LEN
-                await client.write_gatt_char(CHAR_UUID, payload, response=False)
+                await client.write_gatt_char(CHAR_UUID, payload, response=True)
                 await asyncio.sleep(TX_INTERVAL)
         finally:
             try:
