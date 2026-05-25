@@ -228,21 +228,32 @@ async def _ble_session(
         await client.start_notify(CHAR_UUID, on_notify)
         print("Connected.", flush=True)
 
+        last_sent = 0.0
         try:
             while not stop.is_set() and not disconnect_event.is_set():
+                now = time.monotonic()
                 with lock:
                     got = bool(got_state.value)
                     sn = float(last_notify.value)
                     left = int(left_cmd.value)
                     right = int(right_cmd.value)
                     arm = bytes(arm_packed[:])
-                if got and sn > 0.0 and (time.monotonic() - sn) > STALE_NOTIFY_S:
+                if got and sn > 0.0 and (now - sn) > STALE_NOTIFY_S:
                     print("No notify — reconnecting...", flush=True)
                     break
-                payload = _pack_robot_command(left, right, arm)
-                assert len(payload) == CMD_LEN
-                await client.write_gatt_char(CHAR_UUID, payload, response=True)
-                await asyncio.sleep(TX_INTERVAL)
+
+                if now - last_sent >= TX_INTERVAL:
+                    payload = _pack_robot_command(left, right, arm)
+                    assert len(payload) == CMD_LEN
+                    await client.write_gatt_char(CHAR_UUID, payload, response=True)
+                    last_sent = time.monotonic()
+                    continue
+
+                remaining = TX_INTERVAL - (now - last_sent)
+                if remaining > 0.001:
+                    await asyncio.sleep(remaining)
+                else:
+                    await asyncio.sleep(0)
         finally:
             try:
                 await client.stop_notify(CHAR_UUID)
