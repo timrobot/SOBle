@@ -1,48 +1,28 @@
-# soble — SO101 host BLE API
+# SOBle - SO101 Platform Control Package over Bluetooth
 
-Python package for host-side control and teleop of the SO101 platform over BLE, plus USB **leader** arm mapping.
+SO101 Platform
 
-Install name on PyPI-style indexes: **`soble`** (import: `from soble import SO101Platform, SO101Leader`).
+The So101 Platform is a simple chassis with two wheels for differential drive and a couple of sensors to help with several different autonomous algorithms. These sensors include
+
+- a magnetic encoder (12-bit) on each of the left and right wheels
+- a 6-axis inertial measurement unit for heading, pitch, and roll
+- an optional apriltag detector mounted on the top of the gripper
+
+In particular, this python package provides the code host-side control and teleop of the SO101 platform over BLE, plus USB **leader** arm mapping. It also includes several 3D models for printing as well as a list of sourced parts, in case you wish to build the platform yourself.
 
 ---
 
 ## Install
 
-### From git
-
-Repo: [timrobot/SOBle](https://github.com/timrobot/SOBle) (`master`). The repository root **is** the `soble` package.
-
 ```bash
 pip install "soble @ git+https://github.com/timrobot/SOBle.git@master"
-```
-
-### Editable install (development)
-
-```bash
-git clone https://github.com/timrobot/SOBle.git
-cd SOBle
-pip install -e .
-```
-
----
-
-## Package layout
-
-```
-pyproject.toml            # pip metadata (repo root)
-soble/                    # importable package
-    __init__.py
-    so101_platform.py
-    so101_leader.py
-examples/
-  angular_config.json     # example joint mapping (used by example scripts)
-  lead-follow.py
-  viz_apriltags.py
 ```
 
 ---
 
 ## Quick usage
+
+First, plug in the leader arm into your laptop. Make sure to record the port for your leader, as you will need it during connection.
 
 ```python
 from soble import SO101Leader, SO101Platform
@@ -67,8 +47,8 @@ config = {
 }
 leader_limits, follower_limits = SO101Leader.limits_from_config(config)
 
-leader = SO101Leader("/dev/ttyACM0", leader_limits, follower_limits)
-platform = SO101Platform("Capybara")
+leader = SO101Leader("/dev/ttyACM0", leader_limits, follower_limits) # sub in the port of your leader here
+platform = SO101Platform("Capybara") # sub in the name of your robot/So101 Platform here
 
 leader.start()
 platform.start()
@@ -93,74 +73,129 @@ The repo’s example scripts use `examples/angular_config.json`.
 
 ## Examples
 
-```bash
-pip install -e .   # if developing from a clone
+There are a couple of examples to help you get started on your laptop if you just want to see if everything is working.
 
-cd examples
-python lead-follow.py
-python viz_apriltags.py /dev/ttyACM0
-```
 
-| Script | What it does |
-|--------|----------------|
-| `examples/lead-follow.py` | Leader → follower joint mirror; wheels at 0 |
-| `examples/viz_apriltags.py` | WASD drive, leader mirror, tag overlay |
+| Script                      | What it does                                |
+| --------------------------- | ------------------------------------------- |
+| `examples/lead-follow.py`   | Leader → follower joint mirror; wheels at 0 |
+| `examples/viz_apriltags.py` | WASD drive, leader mirror, tag overlay      |
+
 
 AprilTag overlays need the robot’s Pi camera running tag detection and forwarding over BLE (separate Pi setup on the robot).
 
 ---
 
-## What the robot provides
+## Sourcing parts
 
-- **Two wheels** — `setLeftRightMotors(left, right)`
-- **Six arm joints** — `setSO101Position(joints)`
-- **Encoders** — `getEncoders()`
-- **IMU** — `getIMUQuaternion()`
-- **AprilTags** (from Pi camera via robot) — `getApriltagTags()`
+Print the included 3D parts, then source **structural** hardware (including drive motors) from [vexrobotics.com](https://www.vexrobotics.com/). Electronics may be purchased from a vendor of your choice, however this parts list includes some recommendations from Amazon.
 
-Default BLE device name substring: **`Capybara`**.
+*Note: A v2 using more 3D printed structure and Feetech motors for the drives is coming in the near future, and should hopefully be more cost-effective.*
+
+### Structural parts (v1)
+
+
+| Part name                                                     | Qty | Unit Cost | Buy Link                                                     |
+| ------------------------------------------------------------- | --- | --------- | ------------------------------------------------------------ |
+| 4" (320mm Travel) Anti-Static Wheel (2-pack)                  | 1   | $16.50    | [276-8103](https://www.vexrobotics.com/wheels.html)          |
+| 4" (320mm Travel) Omni-Directional Anti-Static Wheel (2-pack) | 1   | $31       | [276-8107](https://www.vexrobotics.com/wheels.html)          |
+| 2-Wire Motor 393                                              | 2   | $19       | [393 motors](https://www.vexrobotics.com/393-motors.html)    |
+| Motor Controller 29                                           | 2   | $12.30    | [276-2193](https://www.vexrobotics.com/276-2193.html)        |
+| V5 Clawbot Structure (Aluminum)                               | 1   | $61       | [276-6240](https://www.vexrobotics.com/276-6240.html)        |
+| Shaft Add-On Kit                                              | 1   | $13       | [228-3057](https://www.vexrobotics.com/drive-shafts.html)    |
+| Rubber Shaft Collar (30-pack)                                 | 1   | $8        | [228-3510](https://www.vexrobotics.com/228-3510.html)        |
+| Bearing Flat (10-pack)                                        | 1   | $6.30     | [276-1209](https://www.vexrobotics.com/v5-bearings.html)     |
+| 0.375" OD Nylon Spacer Variety Pack                           | 1   | $6.30     | [276-6340](https://www.vexrobotics.com/spacers-washers.html) |
+| #8-32 x 0.500" Star Drive Screw (100-pack)                    | 1   | $6.50     | [all-screws](https://www.vexrobotics.com/all-screws.html)    |
+| #8-32 x 1.250" Star Drive Screw (50-pack)                     | 1   | $6.50     | [all-screws](https://www.vexrobotics.com/all-screws.html)    |
+| #8-32 x 1.750" Star Drive Screw (50-pack)                     | 1   | $7.40     | [all-screws](https://www.vexrobotics.com/all-screws.html)    |
+| #8-32 Keps Nut (100-pack)                                     | 1   | $5        | [nuts-8-32](https://www.vexrobotics.com/nuts-8-32.html)      |
+
+
+### Electronics parts
+
+
+| Part name                           | Qty | Unit Cost | Buy Link                                                                                                  |
+| ----------------------------------- | --- | --------- | --------------------------------------------------------------------------------------------------------- |
+| 7.4 V 2S LiPo battery (5200 mAh)    | 1   | $35       | [Amazon](https://www.amazon.com/Zeee-Battery-5200mAh-Vehicles-Airplane/dp/B092CZGW2P)                     |
+| ESP32-WROOM-32 dev board            | 1   | $9        | [Amazon](https://www.amazon.com/AITRIP-ESP-WROOM-32-Development-Microcontroller-Compatible/dp/B0DF2YJSHN) |
+| AS5600 magnetic encoders (2pcs)     | 1   | $8        | [Amazon](https://www.amazon.com/Precision-Magnetic-Encoder-Induction-Measurement/dp/B09X1KQ51J)           |
+| GY-521 (MPU-6050)                   | 1   | $7        | [Amazon](https://www.amazon.com/HiLetgo-MPU-6050-Accelerometer-Gyroscope-Converter/dp/B01DK83ZYQ)         |
+| SSD1306 OLED (128×64, I²C)          | 1   | $6        | [Amazon](https://www.amazon.com/Dorhea-Display-3-3V-5V-Arduino-Raspberry/dp/B07FK8GB8T)                   |
+| Dupont 10cm Female Jumpers          | 1   | $7        | [Amazon](https://www.amazon.com/EDGELEC-Breadboard-1pin-1pin-Connector-Multicolored/dp/B07GD312VG)        |
+| Barrel Connector (5.5x2.1) Male     | 1   | $4        | [Amazon](https://www.amazon.com/Connector-Male-Female-Connectors-Security/dp/B0DVL9NDD1)                  |
+| USB-C to MicroUSB (2pcs) (optional) | 1   | $5        | [Amazon](https://www.amazon.com/JXMOX-Charger-Support-Compatible-Android/dp/B0D479B8DC)                   |
+| Raspberry Pi Zero 2 W (optional)    | 1   | $41       | [Amazon](https://www.amazon.com/CanaKit-Raspberry-Zero-Basic-Official/dp/B0CT1Y3CQJ)                      |
+| OV5647 Camera Module (optional)     | 1   | $7        | [Amazon](https://www.amazon.com/Arducam-Megapixels-Sensor-OV5647-Raspberry/dp/B012V1HEP4)                 |
+
+
+Structural parts cost **$230** in total, and required electronics cost **$76**, primarily due to the battery. Optional electronics add an additional **$53** (USB cable, Pi Zero 2 W, camera).
+
+The **SO101 follower arm** (Feetech servos and its own controller) is not in the table above and must be bought separately.
+
+You will also need a **custom carrier board** for power management and shared I²C. If you skip that board and wire power yourself (or design your own PCB), you will at least need:
+
+
+| Part name              | Qty | Unit Cost | Buy Link                                                                                        |
+| ---------------------- | --- | --------- | ----------------------------------------------------------------------------------------------- |
+| UBEC 5V 3A             | 1   | $8        | [Amazon](https://www.amazon.com/jussming-Adjustable-UBEC-Regulator-Controllers/dp/B0GRGGM2T4)   |
+| Solder-free Connectors | 1   | $10       | [Amazon](https://www.amazon.com/Connectors-HTCELLE-60-Piece-Electrical-Terminals/dp/B0C3LBWSTZ) |
+| XT60 Male Connector    | 1   | $7        | [Amazon](https://www.amazon.com/Padarsey-Connector-Female-Housing-Silicon/dp/B07BF8154S)        |
+| MicroUSB Pigtail       | 1   | $5        | [Amazon](https://www.amazon.com/dp/B0DG5XG7XB)                                                  |
+| JST 2-pin Connectors   | 1   | $6        | [Amazon](https://www.amazon.com/DIANN-Pairs-Connector-Female-Battery/dp/B0CZ8DGZ2Z)             |
+
+
+Finally, you will need a balanced LiPo charger for the battery, such as this one: [Mini Lipo Balance Charger/Discharger](https://www.amazon.com/B6-Battery-Charger-Discharger-Connectors/dp/B0F2H3XR6S).
 
 ---
 
-## Technical reference — `SO101Platform`
+## Code reference — `SO101Platform`
 
 Module: `soble.so101_platform`. BLE I/O runs in a background **process**. Call `start()` before getters/setters and `stop()` when done.
 
 ### Lifecycle
 
-| Method | Returns | Notes |
-|--------|---------|--------|
-| `SO101Platform(device_name: str, *, reconnect_delay_s=0.25, log_state=True)` | — | Does not connect until `start()`. |
-| `start()` | `None` | Scan by name, connect, subscribe @ 25 Hz, TX loop. |
-| `stop()` | `None` | Stop worker; clear tag state. |
-| `running` (property) | `bool` | BLE process alive. |
-| `last_notify_age_s()` | `float \| None` | Seconds since last state notify; `None` if none yet. |
+
+| Method                                                                       | Returns | Notes                                              |
+| ---------------------------------------------------------------------------- | ------- | -------------------------------------------------- |
+| `SO101Platform(device_name: str, *, reconnect_delay_s=0.25, log_state=True)` | —       | Does not connect until `start()`.                  |
+| `start()`                                                                    | `None`  | Scan by name, connect, subscribe @ 25 Hz, TX loop. |
+| `stop()`                                                                     | `None`  | Stop worker; clear tag state.                      |
+| `running` (property)                                                         | `bool`  | BLE process alive.                                 |
+| `last_notify_age_s()`                                                        | `float  | None`                                              |
+
 
 ### Commands (host → robot)
 
-| Method | Arguments | Range / type |
-|--------|-----------|----------------|
-| `setLeftRightMotors(left, right)` | `left: int`, `right: int` | Each **−125 … 125** (clamped). |
-| `setSO101Position(joints)` | `joints: list[int]` | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. |
+
+| Method                            | Arguments                 | Range / type                                                 |
+| --------------------------------- | ------------------------- | ------------------------------------------------------------ |
+| `setLeftRightMotors(left, right)` | `left: int`, `right: int` | Each **−125 … 125** (clamped).                               |
+| `setSO101Position(joints)`        | `joints: list[int]`       | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. |
+
 
 ### State (robot → host)
 
-| Method | Returns | Range / type |
-|--------|-----------|----------------|
-| `getEncoders()` | `tuple[int, int]` | `(left, right)`, each **0 … 4095**. |
-| `getIMUQuaternion()` | `tuple[float, float, float, float]` | Unit quaternion **(w, x, y, z)**. |
-| `getApriltagTags()` | `list[tuple[int, list[tuple[float, float]]]] \| None` | `None` before first notify. Up to **10** tags: `(tag_id, corners_px)`. |
+
+| Method               | Returns                                      | Range / type                        |
+| -------------------- | -------------------------------------------- | ----------------------------------- |
+| `getEncoders()`      | `tuple[int, int]`                            | `(left, right)`, each **0 … 4095**. |
+| `getIMUQuaternion()` | `tuple[float, float, float, float]`          | Unit quaternion **(w, x, y, z)**.   |
+| `getApriltagTags()`  | `list[tuple[int, list[tuple[float, float]]]] | None`                               |
+
 
 ### AprilTags — corners and image
 
-| Item | Value |
-|------|--------|
-| Image size | **1280 × 720** pixels |
-| Tag family | **tag16h5** |
+
+| Item         | Value                                                  |
+| ------------ | ------------------------------------------------------ |
+| Image size   | **1280 × 720** pixels                                  |
+| Tag family   | **tag16h5**                                            |
 | Corner order | **lb, rb, rt, lt** — each corner `(x, y)` float pixels |
-| `x` range | **0 … 1280** |
-| `y` range | **0 … 720** |
-| Max tags | **10** |
+| `x` range    | **0 … 1280**                                           |
+| `y` range    | **0 … 720**                                            |
+| Max tags     | **10**                                                 |
+
 
 **Example** — two tag16h5 tags in view (`None` until the first state notify; `[]` when connected but none detected):
 
@@ -188,24 +223,18 @@ Reconnects if no state notify for **0.3 s** after the first good packet.
 
 ---
 
-## Technical reference — `SO101Leader`
+## Code reference — `SO101Leader`
 
 Module: `soble.so101_leader`. Leader USB serial runs in a background **process**.
 
-| Method | Returns | Notes |
-|--------|---------|--------|
-| `SO101Leader.limits_from_config(cfg: dict)` | `tuple[list[JointLimits], list[JointLimits]]` | `cfg` has `"leader"` / `"follower"` keys **J1…J6**, each `[min, max]`. |
-| `SO101Leader.load_config(path: str \| Path)` | `tuple[list[JointLimits], list[JointLimits]]` | Same layout as a JSON file (e.g. `config.json`). |
-| `SO101Leader(port, leader_limits, follower_limits, baud=1000000)` | — | **`port` required** (e.g. `/dev/ttyACM0`). |
-| `start()` / `stop()` | `None` | Start/stop SYNC_READ loop ~100 Hz. |
-| `getPositions()` | `list[int]` | **6** follower-mapped joint raws **0 … 4095**, or **`[]`** if not ready. |
-| `status_line()` | `str` | Debug: leader vs follower raw per joint. |
 
----
+| Method                                                            | Returns                                       | Notes                                                                    |
+| ----------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
+| `SO101Leader.limits_from_config(cfg: dict)`                       | `tuple[list[JointLimits], list[JointLimits]]` | `cfg` has `"leader"` / `"follower"` keys **J1…J6**, each `[min, max]`.   |
+| `SO101Leader.load_config(path: str                                | Path)`                                        | `tuple[list[JointLimits], list[JointLimits]]`                            |
+| `SO101Leader(port, leader_limits, follower_limits, baud=1000000)` | —                                             | `**port` required** (e.g. `/dev/ttyACM0`).                               |
+| `start()` / `stop()`                                              | `None`                                        | Start/stop SYNC_READ loop ~100 Hz.                                       |
+| `getPositions()`                                                  | `list[int]`                                   | **6** follower-mapped joint raws **0 … 4095**, or `**[]`** if not ready. |
+| `status_line()`                                                   | `str`                                         | Debug: leader vs follower raw per joint.                                 |
 
-## Troubleshooting (host)
 
-- **Lead-follow idle** — wrong leader port; `getPositions()` empty until first good read.
-- **BLE reconnect loop** — robot off or out of range; BLE name must match `SO101Platform("…")`.
-- **No tags in viewer** — Pi detector not running; tag16h5 in camera view.
-- **`ModuleNotFoundError: soble`** — run `pip install` from git or `pip install -e .` in this repo.
