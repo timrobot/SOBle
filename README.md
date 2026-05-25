@@ -1,6 +1,6 @@
 # SOBle - SO101 Platform Control Package over Bluetooth
 
-SO101 Platform
+![SO101 Platform](media/Platform.png)
 
 The So101 Platform is a simple chassis with two wheels for differential drive and a couple of sensors to help with several different autonomous algorithms. These sensors include
 
@@ -90,7 +90,7 @@ AprilTag overlays need the robot’s Pi camera running tag detection and forward
 
 Print the included 3D parts, then source **structural** hardware (including drive motors) from [vexrobotics.com](https://www.vexrobotics.com/). Electronics may be purchased from a vendor of your choice, however this parts list includes some recommendations from Amazon.
 
-*Note: A v2 using more 3D printed structure and Feetech motors for the drives is coming in the near future, and should hopefully be more cost-effective.*
+*Note: A v2 using more 3D printed structure and Feetech motors for the drives is under development, and should hopefully be more cost-effective.*
 
 ### Structural parts (v1)
 
