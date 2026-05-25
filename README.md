@@ -162,7 +162,7 @@ Module: `soble.so101_platform`. BLE I/O runs in a background **process**. Call `
 | `start()`                                                                    | `None`  | Scan by name, connect, subscribe @ 25 Hz, TX loop. |
 | `stop()`                                                                     | `None`  | Stop worker; clear tag state.                      |
 | `running` (property)                                                         | `bool`  | BLE process alive.                                 |
-| `last_notify_age_s()`                                                        | `float  | None`                                              |
+| `last_notify_age_s()`                                                        | `float` or `None` | Seconds since last state notify.                    |
 
 
 ### Commands (host → robot)
@@ -181,7 +181,7 @@ Module: `soble.so101_platform`. BLE I/O runs in a background **process**. Call `
 | -------------------- | -------------------------------------------- | ----------------------------------- |
 | `getEncoders()`      | `tuple[int, int]`                            | `(left, right)`, each **0 … 4095**. |
 | `getIMUQuaternion()` | `tuple[float, float, float, float]`          | Unit quaternion **(w, x, y, z)**.   |
-| `getApriltagTags()`  | `list[tuple[int, list[tuple[float, float]]]] | None`                               |
+| `getApriltagTags()`  | `list[tuple[int, list[tuple[float, float]]]]` or `None` | `None` before first notify; `[]` if none detected. |
 
 
 ### AprilTags — corners and image
@@ -231,10 +231,10 @@ Module: `soble.so101_leader`. Leader USB serial runs in a background **process**
 | Method                                                            | Returns                                       | Notes                                                                    |
 | ----------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
 | `SO101Leader.limits_from_config(cfg: dict)`                       | `tuple[list[JointLimits], list[JointLimits]]` | `cfg` has `"leader"` / `"follower"` keys **J1…J6**, each `[min, max]`.   |
-| `SO101Leader.load_config(path: str                                | Path)`                                        | `tuple[list[JointLimits], list[JointLimits]]`                            |
-| `SO101Leader(port, leader_limits, follower_limits, baud=1000000)` | —                                             | `**port` required** (e.g. `/dev/ttyACM0`).                               |
+| `SO101Leader.load_config(path)`                                   | `tuple[list[JointLimits], list[JointLimits]]` | `path`: `str` or `Path` (e.g. `config.json`).                            |
+| `SO101Leader(port, leader_limits, follower_limits, baud=1000000)` | —                                             | **`port` required** (e.g. `/dev/ttyACM0`).                               |
 | `start()` / `stop()`                                              | `None`                                        | Start/stop SYNC_READ loop ~100 Hz.                                       |
-| `getPositions()`                                                  | `list[int]`                                   | **6** follower-mapped joint raws **0 … 4095**, or `**[]`** if not ready. |
+| `getPositions()`                                                  | `list[int]`                                   | **6** follower-mapped joint raws **0 … 4095**, or **`[]`** if not ready. |
 | `status_line()`                                                   | `str`                                         | Debug: leader vs follower raw per joint.                                 |
 
 
