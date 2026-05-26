@@ -442,18 +442,16 @@ class SO101Platform:
     def getApriltagTags(self, estimate_tag_pose=False, camera_params=[1270, 1270, 640, 360], tag_size=3) -> AprilTagList | None:
         """Tag list from last notify, or None if no state received yet.
         If estimate_tag_pose is True, the tag list will be estimated from the tag corners.
-        camera_params is a tuple of (focal_length, focal_length, image_width, image_height)
-        tag_size is the size of the tag in meters
 
         Args:
             estimate_tag_pose: Whether to estimate the tag pose from the tag corners.
             camera_params: A tuple of (focal_length, focal_length, image_width, image_height).
-            tag_size: The size of the tag in meters.
+            tag_size: The size of the tag (cm or inches or meters)
 
         Returns:
             A list of tuples, each containing a tag id and a list of tag corners. [tag_id, [corner1, corner2, corner3, corner4]]
             If estimate_tag_pose is True, the tag list will be estimated from the tag corners: 
-            [tag_id, [corner1, corner2, corner3, corner4], R, tvec]
+            [tag_id, [lb, rb, rt, lt], R, tvec]
         """
         with self._lock:
             if not self._got_state.value:
