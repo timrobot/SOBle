@@ -7,7 +7,8 @@ import multiprocessing as mp
 import struct
 import time
 from typing import Optional
-
+import cv2
+import numpy as np
 from bleak import BleakClient, BleakScanner
 
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331d914"
@@ -15,6 +16,7 @@ CHAR_UUID = "beb5483e-36e1-4688-b7f2-e6a6a6d74324"
 
 CMD_LEN = 11
 ARM_MOTOR_COUNT = 6  # 6 x 12-bit positions in armPos[9]
+ARM_CENTER_RAW = 2048  # mid of 0..4095 — default when leader not connected
 STATE_LEN = 201
 TAG_INFO_LEN = 18
 MAX_TAGS = 10
@@ -78,7 +80,7 @@ def _unpack_enc12(packed: bytes) -> tuple[int, int]:
 
 def _pack_robot_command(left: int, right: int, arm_packed: bytes) -> bytes:
     if len(arm_packed) != 9:
-        arm_packed = bytes(9)
+        arm_packed = _pack_arm12([ARM_CENTER_RAW] * ARM_MOTOR_COUNT)
     return struct.pack("<bb", left, right) + arm_packed
 
 
@@ -179,6 +181,36 @@ def _unpack_tags_from_shared(ntags: mp.Value, tag_blob: mp.Array, lock: mp.Lock,
         corners = struct.unpack_from("<8h", chunk, 2)
         tags.append((tag_id, _corners_to_pixels(corners, tag_corner_scale, tag_origin)))
     return tags
+
+def _estimate_tag_pose(corners: tuple[int, ...], tag_size: float, camera_params: tuple[float, float, int, int]) -> tuple[bool, np.ndarray, np.ndarray]:
+    half_width = tag_size / 2.0
+    object_points = np.array([
+        [-half_width, -half_width, 0],
+        [half_width, -half_width, 0],
+        [half_width, half_width, 0],
+        [-half_width, half_width, 0],
+    ], dtype=np.float32)
+    image_points = np.array([
+        [corners[0], corners[1]],
+        [corners[2], corners[3]],
+        [corners[4], corners[5]],
+        [corners[6], corners[7]],
+    ], dtype=np.float32)
+    K = np.array([
+        [camera_params[0], 0, camera_params[2]],
+        [0, camera_params[0], camera_params[3]],
+        [0, 0, 1],
+    ], dtype=np.float32)
+    dist = np.zeros(5)  # assume no distortion unless calibrated
+    success, rvec, tvec = cv2.solvePnP(
+        object_points,
+        image_points,
+        K,
+        dist,
+        flags=cv2.SOLVEPNP_ITERATIVE
+    )
+    R, _ = cv2.Rodrigues(rvec)
+    return success, R, tvec
 
 
 async def _find_device_address(device_name: str) -> Optional[str]:
@@ -376,7 +408,9 @@ class SO101Platform:
         self._stop = mp.Event()
         self._left_cmd = mp.Value("i", 0)
         self._right_cmd = mp.Value("i", 0)
-        self._arm_packed = mp.Array("B", 9)
+        self._arm_packed = mp.Array(
+            "B", _pack_arm12([ARM_CENTER_RAW] * ARM_MOTOR_COUNT)
+        )
         self._got_state = mp.Value("b", False)
         self._last_notify = mp.Value("d", 0.0)
         self._enc = mp.Array("i", 2)
@@ -410,18 +444,47 @@ class SO101Platform:
                 float(self._quat[3]),
             )
 
-    def getApriltagTags(self) -> AprilTagList | None:
-        """Tag list from last notify, or None if no state received yet."""
+    def getApriltagTags(self, estimate_tag_pose=False, camera_params=[1270, 1270, 640, 360], tag_size=3) -> AprilTagList | None:
+        """Tag list from last notify, or None if no state received yet.
+        If estimate_tag_pose is True, the tag list will be estimated from the tag corners.
+        camera_params is a tuple of (focal_length, focal_length, image_width, image_height)
+        tag_size is the size of the tag in meters
+
+        Args:
+            estimate_tag_pose: Whether to estimate the tag pose from the tag corners.
+            camera_params: A tuple of (focal_length, focal_length, image_width, image_height).
+            tag_size: The size of the tag in meters.
+
+        Returns:
+            A list of tuples, each containing a tag id and a list of tag corners. [tag_id, [corner1, corner2, corner3, corner4]]
+            If estimate_tag_pose is True, the tag list will be estimated from the tag corners: 
+            [tag_id, [corner1, corner2, corner3, corner4], R, tvec]
+        """
         with self._lock:
             if not self._got_state.value:
                 return None
-        return _unpack_tags_from_shared(
-            self._ntags,
-            self._tag_blob,
-            self._lock,
-            self._tag_corner_scale,
-            (self._tag_origin_x, self._tag_origin_y),
-        )
+        if not estimate_tag_pose:
+            return _unpack_tags_from_shared(
+                self._ntags,
+                self._tag_blob,
+                self._lock,
+                self._tag_corner_scale,
+                (self._tag_origin_x, self._tag_origin_y),
+            )
+        else:
+            poses = []
+            tags = _unpack_tags_from_shared(
+                self._ntags,
+                self._tag_blob,
+                self._lock,
+                self._tag_corner_scale,
+                (self._tag_origin_x, self._tag_origin_y),
+            )
+            for (tag_id, corners) in tags:
+                success, R, tvec = _estimate_tag_pose(corners, tag_size, camera_params)
+                if success:
+                    poses.append((tag_id, corners, R, tvec))
+            return poses
 
     def setSO101Position(self, joints: list[int]) -> None:
         packed = _pack_arm12(joints)
