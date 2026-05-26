@@ -190,12 +190,7 @@ def _estimate_tag_pose(corners: tuple[int, ...], tag_size: float, camera_params:
         [half_width, half_width, 0],
         [-half_width, half_width, 0],
     ], dtype=np.float32)
-    image_points = np.array([
-        [corners[0], corners[1]],
-        [corners[2], corners[3]],
-        [corners[4], corners[5]],
-        [corners[6], corners[7]],
-    ], dtype=np.float32)
+    image_points = np.array(corners, dtype=np.float32)
     K = np.array([
         [camera_params[0], 0, camera_params[2]],
         [0, camera_params[0], camera_params[3]],
