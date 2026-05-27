@@ -556,8 +556,8 @@ class SO101Platform:
                 float(self._quat[3]),
             )
 
-    def getApriltagTags(self, estimate_tag_pose=False, camera_params=[1270, 1270, 640, 360], tag_size=3) -> AprilTagList | None:
-        """Tag list from last notify, or None if no state received yet.
+    def getApriltagTags(self, estimate_tag_pose=False, camera_params=[1270, 1270, 640, 360], tag_size=3) -> AprilTagList:
+        """Tag list from last notify (empty list if no state received yet).
         If estimate_tag_pose is True, the tag list will be estimated from the tag corners.
 
         Args:
@@ -572,7 +572,7 @@ class SO101Platform:
         """
         with self._lock:
             if not self._got_state.value:
-                return None
+                return []
         if not estimate_tag_pose:
             return _unpack_tags_from_shared(
                 self._ntags,
