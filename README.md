@@ -183,7 +183,7 @@ Module: `soble.so101_platform`. BLE I/O runs in a background **process**. Call `
 | -------------------- | -------------------------------------------- | ----------------------------------- |
 | `getEncoders()`      | `tuple[int, int]`                            | `(left, right)`, each **0 … 4095**. |
 | `getIMUQuaternion()` | `tuple[float, float, float, float]`          | Unit quaternion **(w, x, y, z)**.   |
-| `getApriltagTags()`  | `list[tuple[int, list[tuple[float, float]]]]` or `None` | `None` before first notify; `[]` if none detected. |
+| `getApriltagTags()`  | `list[tuple[int, list[tuple[float, float]]]]` | `[]` before first notify, and `[]` when none detected. |
 
 
 ### AprilTags — corners and image

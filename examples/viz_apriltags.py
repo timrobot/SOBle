@@ -134,7 +134,7 @@ def pygame_loop(
         platform.setSO101Position(positions)
 
         leader_hud = leader.status_line()
-        tags_viz = platform.getApriltagTags() or []
+        tags_viz = platform.getApriltagTags()
         notify_age = platform.last_notify_age_s()
 
         view.fill((16, 16, 20))
