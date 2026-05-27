@@ -47,9 +47,19 @@ static uint32_t lastCommandMs = 0;
 
 #pragma pack(push, 1)
 struct RobotCommand {
-  int8_t left; // -125 to 125
-  int8_t right; // -125 to 125
-  uint8_t arm[9]; // STS goal position (u16), each position takes up 12bits - 12*6 = 72bits = 9bytes
+  uint8_t cmd;
+  union {
+    struct {
+      int8_t left; // -125 to 125
+      int8_t right; // -125 to 125
+      uint8_t arm[9]; // STS goal position (u16), each position takes up 12bits - 12*6 = 72bits = 9bytes
+    } actuators;
+    struct {
+      uint8_t ip[4];
+      uint16_t port;
+      uint8_t _buf[5]; // nothing
+    } raspi;
+  } u;
 };
 
 struct AprilTagInfo {
@@ -66,10 +76,34 @@ struct RobotState {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(RobotCommand) == 12, "RobotCommand layout must match BLE host");
+
+// cmd byte: 0 = actuators (BLE teleop); '1'/'2'/'3'/'A' forwarded to Pi (detect_atags.py)
+static constexpr uint8_t CMD_ACTUATORS = 0;
+static constexpr uint8_t CMD_TAG16H5 = '1';
+static constexpr uint8_t CMD_TAG25H9 = '2';
+static constexpr uint8_t CMD_TAG36H11 = '3';
+static constexpr uint8_t CMD_STREAM = 'A';
+static constexpr size_t RASPI_CMD_PAYLOAD_LEN = 7;
+
 RobotCommand targets;
 RobotState st;
 
 HostSerial hostSerial(Serial, 1);
+
+static inline bool isRaspiCmd(uint8_t cmd) {
+  return cmd == CMD_TAG16H5 || cmd == CMD_TAG25H9 || cmd == CMD_TAG36H11 || cmd == CMD_STREAM;
+}
+
+/** Pack 7-byte Pi command (cmd + ip[4] + port) for HostSerial::writeBytes. */
+static void forwardPiCommand(const RobotCommand &rc) {
+  uint8_t payload[RASPI_CMD_PAYLOAD_LEN];
+  payload[0] = rc.cmd;
+  memcpy(&payload[1], rc.u.raspi.ip, 4);
+  memcpy(&payload[5], &rc.u.raspi.port, 2);
+  hostSerial.writeBytes(payload, RASPI_CMD_PAYLOAD_LEN);
+}
+
 So101Arm arm(2, ARM_RX, ARM_TX, ARM_BAUD);
 static bool armHaltSent = false;
 static int16_t gJointPos[So101Arm::kMotorCount];
@@ -118,10 +152,20 @@ struct CbChar : BLECharacteristicCallbacks {
     if (n != sizeof(RobotCommand)) {
       return;
     }
-    memcpy(&targets, v.c_str(), sizeof(targets));
-    targets.left = (int8_t)constrain((int)targets.left, -125, 125);
-    targets.right = (int8_t)constrain((int)targets.right, -125, 125);
-    lastCommandMs = millis();
+    RobotCommand incoming;
+    memcpy(&incoming, v.c_str(), sizeof(incoming));
+    if (incoming.cmd == CMD_ACTUATORS) {
+      targets = incoming;
+      targets.u.actuators.left =
+          (int8_t)constrain((int)targets.u.actuators.left, -125, 125);
+      targets.u.actuators.right =
+          (int8_t)constrain((int)targets.u.actuators.right, -125, 125);
+      lastCommandMs = millis();
+      return;
+    }
+    if (isRaspiCmd(incoming.cmd)) {
+      forwardPiCommand(incoming);
+    }
   }
 };
 
@@ -221,8 +265,8 @@ void setup() {
 
   servoLeft.attach(SERVO_LEFT);
   servoRight.attach(SERVO_RIGHT);
-  servoLeft.writeMicroseconds((int)(targets.left * 4) + 1500);
-  servoRight.writeMicroseconds((int)(targets.right * 4) + 1500);
+  servoLeft.writeMicroseconds((int)(targets.u.actuators.left * 4) + 1500);
+  servoRight.writeMicroseconds((int)(targets.u.actuators.right * 4) + 1500);
 
   arm.begin();
 
@@ -312,15 +356,15 @@ void loop() {
     armHaltSent = false;
     if (currentMillis - prevArmWriteMs >= SO_TX_INTERVAL) {
       prevArmWriteMs = currentMillis;
-      unpackArm12(targets.arm, gJointRawPos);
+      unpackArm12(targets.u.actuators.arm, gJointRawPos);
       for (uint8_t i = 0; i < So101Arm::kMotorCount; i++) {
         gJointPos[i] = (int16_t)gJointRawPos[i];
       }
       arm.setAngles(gJointPos);
     }
   } else {
-    targets.left = 0;
-    targets.right = 0;
+    targets.u.actuators.left = 0;
+    targets.u.actuators.right = 0;
     if (lastCommandMs != 0 && !armHaltSent) {
       arm.halt();
       armHaltSent = true;
@@ -337,8 +381,8 @@ void loop() {
     }
   }
 
-  servoLeft.writeMicroseconds((int)(targets.left * 4) + 1500);
-  servoRight.writeMicroseconds((int)(targets.right * 4) + 1500);
+  servoLeft.writeMicroseconds((int)(targets.u.actuators.left * 4) + 1500);
+  servoRight.writeMicroseconds((int)(targets.u.actuators.right * 4) + 1500);
 
   if (currentMillis - prevBleTxMs >= BLE_TX_INTERVAL) {
     prevBleTxMs = currentMillis;

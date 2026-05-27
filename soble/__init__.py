@@ -7,7 +7,7 @@ from soble.so101_leader import (
     JointLimits,
     SO101Leader,
 )
-from soble.so101_platform import SO101Platform
+from soble.so101_platform import SO101Platform, get_lan_ip
 
 __all__ = [
     "ARM_MOTOR_COUNT",
@@ -16,6 +16,7 @@ __all__ = [
     "JointLimits",
     "SO101Leader",
     "SO101Platform",
+    "get_lan_ip",
 ]
 
 __version__ = "0.1.0"
