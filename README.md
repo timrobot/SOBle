@@ -170,8 +170,10 @@ Module: `soble.so101_platform`. BLE I/O runs in a background **process**. Call `
 
 | Method                            | Arguments                 | Range / type                                                 |
 | --------------------------------- | ------------------------- | ------------------------------------------------------------ |
-| `setLeftRightMotors(left, right)` | `left: int`, `right: int` | Each **−125 … 125** (clamped).                               |
+| `setLeftRightMotors(left, right)` | `left: int`, `right: int` | Each **−125 … 125** (clamped). BLE payload **12** bytes (`cmd=0` + actuators). |
 | `setSO101Position(joints)`        | `joints: list[int]`       | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. |
+| `setTagDetectionMode(family)`     | `family: str`             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'` — forwarded to the Pi over USB. |
+| `enableCameraStreamMode(host=None, port=5000, onFrameCallback=None)` | see method | Pi streams RTP to this PC (default LAN IP). Host receives H.264 on `port` via `nvh264dec` → BGR `onFrameCallback`. |
 
 
 ### State (robot → host)
