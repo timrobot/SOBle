@@ -187,23 +187,118 @@ Mount the **base of the SO101 follower arm** to the chassis (printed mount / tow
 1. Position the **SO101 arm base** over the mounting holes on the electronics plate / frame as shown.
 2. Pass four **1.75"** screws through the base and the aligned holes in the plate and structure below.
 3. Tighten **keps nuts** on the underside of the stack.
-4. The rest of the arm is assembled after platform steps 1–8 (see below).
+4. Complete the rest of the arm in **Step 11** below (after wiring).
 
 ---
 
-## After platform assembly (steps 1–8)
+## Step 9 — Wiring the sensors
 
-1. **Assemble the SO101 arm** per the arm kit instructions (segments, joints, etc.).
-2. **Optional:** mount the **Raspberry Pi Zero** and **camera module** if you are using on-robot vision — see the [Pi setup guide](../raspi/README.md).
-3. **Connect the arm** to the **SO101 driver board** on the platform.
-4. **Wire** the driver board, **MPU-6050**, **OLED**, **UBEC**, drive **motors**, and power paths to the **ESP32 carrier board** (center board).
-5. **Flash** the [ESP32 firmware](../esp32/So101-Platform/) and, if used, set up the [Pi](../raspi/README.md) (`detect_atags.py`, services, etc.).
-6. **Install the battery** and verify power routing (UBEC / motor supply) before first motion.
-7. On a host PC, install **`soble`** and run examples:
-   - [`examples/lead-follow.py`](../examples/lead-follow.py) — leader arm → follower mirror
-   - [`examples/viz_apriltags.py`](../examples/viz_apriltags.py) — teleop + tag overlay (needs Pi tag detection for overlays)
+![Wiring](Wiring.png)
 
-See the main [README](../README.md) for BLE teleop APIs, sourcing, and wiring notes.
+With the mechanics finished, wire the sensors and peripherals to the SO101 driver board as shown in the diagram.
+
+1. **Drive motors**
+   - Connect the **left drive motor** to the **PWM1** motor output.
+   - Connect the **right drive motor** to the **PWM4** motor output.
+2. **Left encoder (6-pin)**
+   - Plug the **left encoder** into the **5-pin PWM5** header.
+   - Orient the connector so the **red wire is closest to the motors**.
+3. **Right magnetic encoder (4-pin)**
+   - Plug the **right magnetic encoder** into the **4-pin VS1** header.
+   - Orient the connector so the **red wire is farthest away from the motors**.
+4. **IMU (GY-521 / MPU-6050)**
+   - Wire the IMU to the matching header pins exactly as in the diagram:
+     - **RED → 3V3**
+     - **BLUE → GND**
+     - **YELLOW → SDA**
+     - **GREEN → SCL**
+5. **SO101 arm serial (PWM6 header)**
+   - Connect the arm cable to the **PWM6** header:
+     - **BLUE → GND**
+     - **WHITE → RX**
+     - **PURPLE → TX**
+6. **OLED display (SSD1306)**
+   - This is the trickiest wiring; double-check each color:
+     - **3V3** on the OLED → **RED** on **PWM6**
+     - **GND** on the OLED → **BLUE** on **TH3**
+     - **SDA** on the OLED → **YELLOW** on **TH3**
+     - **SCL** on the OLED → **GREEN** on **TH2**
+
+---
+
+## Step 10 — Wiring the power
+
+![DCDC](DCDC.png)
+
+Wire the power path (battery → buck converter → SO101 board) as shown.
+
+1. Plug the **XT30 connectors** into the **two XT30 sockets** on the PCB.
+2. Plug the **jumper wires** into the **DC/DC buck**:
+   - **Orange/Red → Vin**
+   - **Blue/Black → GND**
+3. Plug the **barrel connector** into the **SO101 board**.
+
+---
+
+## Step 11 — Assemble the SO101 arm
+
+Build the follower arm per the official [LeRobot SO-101 assembly guide](https://huggingface.co/docs/lerobot/so101) (motor setup, joints, gripper). When the arm is complete, mount it on the platform base from Step 8.
+
+---
+
+## Step 12 — Flash firmware
+
+Open [`esp32/So101-Platform/`](../esp32/So101-Platform/) in the Arduino IDE (or your usual ESP32 flow) and flash the sketch to the dev board.
+
+---
+
+## Step 13 — Install the battery and choose power mode
+
+1. **Install the battery** — Seat the pack and confirm motor/arm power through the buck path (Step 10) before driving anything.
+
+2. **Choose how you power the ESP32** (and Pi, if used):
+
+   **Option A — Direct power (no Raspi cam)**  
+   Use any portable **5V power bank** and connect it to the **ESP32 USB-C** port.
+
+   **Option B — Raspi cam + USB power**  
+   Complete **[Optional Raspi Camera Attachment](#optional-raspi-camera-attachment-option-b)** below before Step 14.
+
+---
+
+## Step 14 — PC: install `soble` and run examples
+
+On your computer, install the Python package from the [main README](../README.md), pair over BLE, then try:
+
+- [`examples/lead-follow.py`](../examples/lead-follow.py) — leader arm mirrors to the follower
+- [`examples/viz_apriltags.py`](../examples/viz_apriltags.py) — teleop + tag overlay (requires Pi camera path)
+
+---
+
+## Optional Raspi Camera Attachment (Option B)
+
+**Option B only.** Complete these substeps after Steps 1–13 (and Step 12 firmware). Finish this section **before** Step 14 on your PC.
+
+1. **Mount the camera bracket** — Attach the printed **Raspi cam mount** to the SO101 **gripper** with the available **M3 screws and nuts**.
+2. **Camera to Pi** — Connect the **Raspberry Pi Camera Module v1.3** to the **Raspberry Pi Zero 2 W** camera port.
+3. **Mount Pi + camera** — Secure the **camera** and **Pi Zero 2 W** to the cam mount.
+4. **SD card** — Flash an SD card with **Raspberry Pi OS** (Raspbian).
+5. **AprilTag service** — Boot the Pi, copy the `SOBle/raspi` tree onto it, and run:
+   ```bash
+   bash install-detect-atags-service.sh
+   ```
+   (from [`SOBle/raspi/`](../raspi/)). Then **shut the Pi down**.
+6. **Power from the DCDC board** — Using the **micro-USB to jumper** cable:
+   - **GND** jumpers → **GND** pins on the **DCDC** board
+   - **3V3** jumper → **VOUT** pins on the **DCDC** board
+   - **Micro-USB** end → **power** input on the **Pi Zero 2 W**
+7. **Data to ESP32** — Using the **micro-USB to USB-C** cable:
+   - **Micro-USB** end → **USB data** on the **Pi**
+   - **USB-C** end → **ESP32** dev board
+
+You may now proceed to **Step 14** (`soble` + examples on your PC).
+
+More Pi details: [raspi/README.md](../raspi/README.md).
 
 ---
 
@@ -219,5 +314,12 @@ See the main [README](../README.md) for BLE teleop APIs, sourcing, and wiring no
 | 6 | Electronics plates | [Step6.png](Step6.png) |
 | 7 | Boards and sensors | [Step7.png](Step7.png) |
 | 8 | SO101 arm base | [Step8.png](Step8.png) |
+| 9 | Wiring the sensors | [Wiring.png](Wiring.png) |
+| 10 | Wiring the power | [DCDC.png](DCDC.png) |
+| 11 | Assemble SO101 arm | — |
+| 12 | Flash firmware | — |
+| 13 | Battery + power mode | — |
+| 14 | PC: `soble` + examples | — |
+| — | *Option B:* Raspi camera attachment | [below Step 14](#optional-raspi-camera-attachment-option-b) |
 
 If a printed part name in your slicer folder differs from the labels above, match by shape to the step image.
