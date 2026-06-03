@@ -13,7 +13,6 @@ import numpy as np
 import pygame
 from pyapriltags import Detector
 
-ROBOT_NAME = "Capybara"
 FRAME_W = 1280
 FRAME_H = 720
 MOTOR_SPEED_SCALE = 125
@@ -164,13 +163,13 @@ def pygame_loop(
 def main() -> int:
     p = argparse.ArgumentParser(description="BLE teleop: leader USB + SO101 follower")
     p.add_argument(
-        "--config",
+        "--config", "-c",
         type=Path,
         default=Path(__file__).resolve().parent / "angular_config.json",
         help="angular_config.json (default: examples/angular_config.json)",
     )
-    p.add_argument("leader_port", help="Leader arm serial device, e.g. /dev/ttyACM0")
-    p.add_argument("--name", default=ROBOT_NAME)
+    p.add_argument("--leader_port", "-p", help="Leader arm serial device, e.g. /dev/ttyACM0", default="/dev/ttyACM0")
+    p.add_argument("--name", "-n", help="Robot name", default="Capybara")
     p.add_argument("--motor", type=int, default=MOTOR_SPEED_SCALE)
     p.add_argument("--turn", type=int, default=TURN_SPEED_SCALE)
     args = p.parse_args()
