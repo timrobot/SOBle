@@ -16,7 +16,7 @@ Each step has an illustration where noted (see the quick reference table) and a 
 
 ## Step 1 — Rear cross member
 
-Step 1
+![Step 1](Step1.png)
 
 Join the two side rails with the **L-channel** at the **rear** of the chassis (one end of the U-channels).
 
@@ -40,7 +40,7 @@ Join the two side rails with the **L-channel** at the **rear** of the chassis (o
 
 ## Step 2 — Mid frame cross member (C-channel + L-brackets)
 
-Step 2
+![Step 2](Step2.png)
 
 Add the **C-channel** cross member partway along the frame, using **L-brackets** at both sides.
 
@@ -64,7 +64,7 @@ Add the **C-channel** cross member partway along the frame, using **L-brackets**
 
 ## Step 3 — Drive motors
 
-Step 3
+![Step 3](Step3.png)
 
 Mount both drive motors on the **inside** of the U-channels (front of the robot in the final orientation).
 
@@ -87,7 +87,7 @@ Mount both drive motors on the **inside** of the U-channels (front of the robot 
 
 ## Step 4 — Axles, bearings, and shaft hardware
 
-Step 4
+![Step 4](Step4.png)
 
 Install the **wheel axles** and **bearing flats** on both U-channels (four wheel stations).
 
@@ -113,7 +113,7 @@ Install the **wheel axles** and **bearing flats** on both U-channels (four wheel
 
 ## Step 5 — Wheels
 
-Step 5
+![Step 5](Step5.png)
 
 Press the wheels onto the axles and lock them with shaft collars.
 
@@ -135,7 +135,7 @@ Press the wheels onto the axles and lock them with shaft collars.
 
 ## Step 6 — Electronics mounting plates
 
-Step 6
+![Step 6](Step6.png)
 
 Bolt the two **printed mounting plates** to the top of the C-channel.
 
@@ -158,7 +158,7 @@ Bolt the two **printed mounting plates** to the top of the C-channel.
 
 ## Step 7 — Main electronics on the plates
 
-Step 7
+![Step 7](Step7.png)
 
 Mount the control boards and sensors onto the plates from Step 6. The **SO101 driver board** (right side) is already on standoffs — leave it assembled as shown.
 
@@ -184,7 +184,7 @@ Mount the control boards and sensors onto the plates from Step 6. The **SO101 dr
 
 ## Step 8 — SO101 arm base
 
-Step 8
+![Step 8](Step8.png)
 
 Mount the **base of the SO101 follower arm** to the chassis (printed mount / tower in the diagram).
 
@@ -207,7 +207,7 @@ Mount the **base of the SO101 follower arm** to the chassis (printed mount / tow
 
 ## Step 9 — Wiring the sensors
 
-Wiring
+![Wiring](Wiring.png)
 
 With the mechanics finished, wire the sensors and peripherals to the SO101 driver board as shown in the diagram.
 
@@ -269,7 +269,7 @@ On your **PC**, after sensor wiring (Step 9):
 
 ## Step 11 — Wiring the power
 
-DCDC
+![DCDC](DCDC.png)
 
 Wire the power path (battery → buck converter → SO101 board) as shown.
 
@@ -286,9 +286,9 @@ Wire the power path (battery → buck converter → SO101 board) as shown.
 
 ## Step 12 — Assemble the SO101 arm
 
-If you plan to add the **Raspi camera attachment**, print `[STL/so101-pcb-camera-wrist-mount.stl](../STL/so101-pcb-camera-wrist-mount.stl)` and mount it on the gripper as shown:
+If you plan to add the **Raspi camera attachment**, print [`STL/so101-pcb-camera-wrist-mount.stl`](../STL/so101-pcb-camera-wrist-mount.stl) and mount it on the gripper as shown:
 
-Camera mount
+![Camera mount](CamMount.png)
 
 Build the follower arm per the official [LeRobot SO-101 assembly guide](https://huggingface.co/docs/lerobot/so101) (motor setup, joints, gripper), starting from the base mounted in Step 8.
 
@@ -305,7 +305,7 @@ Build the follower arm per the official [LeRobot SO-101 assembly guide](https://
   ```bash
   bash install-detect-atags-service.sh
   ```
-   (from `[SOBle/raspi/](../raspi/)`). Then **shut the Pi down**.
+   (from [`SOBle/raspi/`](../raspi/)). Then **shut the Pi down**.
 5. **Data to ESP32** — Using the **micro-USB to USB-C** cable:
   - **Micro-USB** end → **USB data** on the **Pi**
   - **USB-C** end → **ESP32** dev board
