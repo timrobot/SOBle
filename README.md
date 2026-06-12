@@ -80,6 +80,7 @@ There are a couple of examples to help you get started on your laptop if you jus
 | --------------------------- | ------------------------------------------- |
 | `examples/lead-follow.py`   | Leader → follower joint mirror; wheels at 0 |
 | `examples/viz_apriltags.py` | WASD drive, leader mirror, tag overlay      |
+| `examples/open-camera-stream.py` | WiFi setup + RTP camera preview (`cv2`)  |
 
 
 AprilTag overlays need the robot’s Pi camera running tag detection and forwarding over BLE (separate Pi setup on the robot).
@@ -173,8 +174,17 @@ Module: `soble.so101_platform`. BLE I/O runs in a background **process**. Call `
 | `setLeftRightMotors(left, right)` | `left: int`, `right: int` | Each **−125 … 125** (clamped). BLE payload **12** bytes (`cmd=0` + actuators). |
 | `setSO101Position(joints)`        | `joints: list[int]`       | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. |
 | `setTagDetectionMode(family)`     | `family: str`             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'` — forwarded to the Pi over USB. |
-| `enableCameraStreamMode(host=None, port=5000, onFrameCallback=None)` | see method | Pi streams RTP to this PC (default LAN IP). Host receives H.264 on `port` via `nvh264dec` → BGR `onFrameCallback`. |
+| `enableCameraStreamMode(host=None, port=5000, onFrameCallback=None)` | see method | Pi streams RTP to this PC (default LAN IP). Host receives H.264 on `port` via GStreamer → BGR `onFrameCallback`. |
+| `connectToWifi(ssid, password)` | `ssid: str`, `password: str` | BLE `'U'` / `'P'` → ESP32 → Pi; poll `getWifiConnected()` before streaming. See example `examples/open-camera-stream.py`. |
 
+
+**Pi camera stream (order matters):**
+
+1. `SO101Platform("Capybara")` — use the BLE name shown on the robot OLED — then `start()`.
+2. `connectToWifi(ssid, password)`, then wait until `getWifiConnected()` is true (Pi on the network and serial ack). Commands queue until BLE connects.
+3. `enableCameraStreamMode(..., onFrameCallback=...)`. A callback is required — each decoded **1280×720** BGR frame arrives on a background thread (e.g. `cv2.imshow` + `cv2.waitKey(1)`).
+
+See `examples/open-camera-stream.py`.
 
 ### State (robot → host)
 
@@ -184,6 +194,8 @@ Module: `soble.so101_platform`. BLE I/O runs in a background **process**. Call `
 | `getEncoders()`      | `tuple[int, int]`                            | `(left, right)`, each **0 … 4095**. |
 | `getIMUQuaternion()` | `tuple[float, float, float, float]`          | Unit quaternion **(w, x, y, z)**.   |
 | `getApriltagTags()`  | `list[tuple[int, list[tuple[float, float]]]]` | `[]` before first notify, and `[]` when none detected. |
+| `getRaspiAlive()`    | `bool`                                       | Pi serial seen recently (status byte on notify).       |
+| `getWifiConnected()` | `bool`                                       | Pi reported WiFi up (after `connectToWifi`).          |
 
 
 ### AprilTags — corners and image

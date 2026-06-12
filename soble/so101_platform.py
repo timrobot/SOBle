@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import math
 import multiprocessing as mp
 import platform
+import queue
 import socket
 import struct
 import threading
@@ -22,13 +24,18 @@ from soble import camera_stream as host_camera_stream
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331d914"
 CHAR_UUID = "beb5483e-36e1-4688-b7f2-e6a6a6d74324"
 
-CMD_LEN = 12  # uint8 cmd + union (actuators or raspi), matches RobotCommand on ESP32
-CMD_ACTUATORS = 0
+CMD_ACTUATOR_LEN = 13  # cmd + left + right + arm[9] + enabled — matches RobotCommand on ESP32
+CMD_RASPI_LEN = 12  # cmd + raspi union (forwarded as 7 bytes on ESP32)
+CMD_ACTUATORS = ord("0")
 CMD_TAG16H5 = ord("1")
 CMD_TAG25H9 = ord("2")
 CMD_TAG36H11 = ord("3")
 CMD_STREAM = ord("A")
+CMD_WIFIUSER = ord("U")
+CMD_WIFIPASS = ord("P")
+WIFI_CRED_MAX = 128  # matches ESP32 So101-Platform.ino
 ARM_MOTOR_COUNT = 6  # 6 x 12-bit positions in armPos[9]
+ARM_ENABLE_MASK = 0x3F  # bit0=J1 .. bit5=J6 — all arm joints engaged
 ARM_CENTER_RAW = 2048  # mid of 0..4095 — default when leader not connected
 STATE_LEN = 201
 TAG_INFO_LEN = 18
@@ -156,13 +163,16 @@ def _unpack_enc12(packed: bytes) -> tuple[int, int]:
     return left & 0x0FFF, right & 0x0FFF
 
 
-def _pack_robot_command(left: int, right: int, arm_packed: bytes) -> bytes:
-    """BLE teleop: cmd=0 + actuators union (left, right, arm[9])."""
+def _pack_robot_command(
+    left: int, right: int, arm_packed: bytes, *, arm_disabled: bool = False
+) -> bytes:
+    """BLE teleop: cmd='0' + left + right + arm[9] + enabled (bit0=J1 .. bit5=J6)."""
     if len(arm_packed) != 9:
         arm_packed = _pack_arm12([ARM_CENTER_RAW] * ARM_MOTOR_COUNT)
     left = max(-125, min(125, int(left)))
     right = max(-125, min(125, int(right)))
-    return struct.pack("<Bbb", CMD_ACTUATORS, left, right) + arm_packed
+    enabled = 0 if arm_disabled else ARM_ENABLE_MASK
+    return struct.pack("<Bbb", CMD_ACTUATORS, left, right) + arm_packed + bytes([enabled])
 
 
 def _pack_raspi_ble_command(cmd: int, ip: str = "0.0.0.0", port: int = 0) -> bytes:
@@ -172,13 +182,31 @@ def _pack_raspi_ble_command(cmd: int, ip: str = "0.0.0.0", port: int = 0) -> byt
     return struct.pack("<B", cmd & 0xFF) + body
 
 
+def _pack_wifi_user(ssid: str) -> bytes:
+    """BLE → ESP32: 'U' + SSID bytes (no NUL). Max 127 UTF-8 bytes."""
+    raw = ssid.encode("utf-8")
+    if not raw or len(raw) > WIFI_CRED_MAX - 1:
+        raise ValueError(f"SSID must be 1..{WIFI_CRED_MAX - 1} UTF-8 bytes")
+    return bytes([CMD_WIFIUSER]) + raw
+
+
+def _pack_wifi_pass(password: str) -> bytes:
+    """BLE → ESP32: 'P' + password bytes (no NUL). Max 127 UTF-8 bytes."""
+    raw = password.encode("utf-8")
+    if not raw or len(raw) > WIFI_CRED_MAX - 1:
+        raise ValueError(f"password must be 1..{WIFI_CRED_MAX - 1} UTF-8 bytes")
+    return bytes([CMD_WIFIPASS]) + raw
+
+
 def _unpack_robot_state(data: bytes) -> dict | None:
     if len(data) < STATE_LEN:
         return None
     enc_l, enc_r = _unpack_enc12(data[0:3])
     arm = _unpack_arm12(data[3:12])
     quat = struct.unpack("<hhhh", data[12:20])
-    ntags = min(data[20], 10)
+    ntags = min(data[20] & 0x1F, 10)
+    raspi_alive = (data[20] & 0x80) != 0
+    wifi_connected = (data[20] & 0x40) != 0
     tags: AprilTagList = []
     off = 21
     for _ in range(ntags):
@@ -195,17 +223,36 @@ def _unpack_robot_state(data: bytes) -> dict | None:
         "quat": quat,
         "ntags": ntags,
         "tags": tags,
+        "raspi": raspi_alive,
+        "wifi": wifi_connected,
     }
+
+
+def _quat_to_rph_deg(qw: float, qx: float, qy: float, qz: float) -> tuple[float, float, float]:
+    """Roll, pitch, heading (deg) — same convention as So101-Platform.ino Madgwick output."""
+    roll = math.degrees(
+        math.atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
+    )
+    sinp = 2.0 * (qw * qy - qz * qx)
+    if abs(sinp) >= 1.0:
+        pitch = math.copysign(90.0, sinp)
+    else:
+        pitch = math.degrees(math.asin(sinp))
+    heading = math.degrees(
+        math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+    )
+    return roll, pitch, heading
 
 
 def _format_state_line(state: dict) -> str:
     enc_l, enc_r = state["enc"]
     arm = state["arm"]
     qw, qx, qy, qz = (v / 1000.0 for v in state["quat"])
+    roll, pitch, heading = _quat_to_rph_deg(qw, qx, qy, qz)
     parts = [
-        f"enc_raw L={enc_l} R={enc_r}",
+        f"wheel_raw L={enc_l} R={enc_r}",
         f"arm_raw={' '.join(str(a) for a in arm)}",
-        f"quat_wxyz=({qw:.4f},{qx:.4f},{qy:.4f},{qz:.4f})",
+        f"roll={roll:6.1f} pitch={pitch:6.1f} heading={heading:6.1f}",
     ]
     if state["ntags"] > 0:
         parts.append(f"ntags={state['ntags']}")
@@ -220,6 +267,8 @@ def _publish_state(
     quat: mp.Array,
     ntags: mp.Value,
     tag_blob: mp.Array,
+    raspi: mp.Value,
+    wifi: mp.Value,
     lock: mp.Lock,
 ) -> None:
     qw, qx, qy, qz = (v / 1000.0 for v in state["quat"])
@@ -230,6 +279,8 @@ def _publish_state(
         enc[1] = enc_r
         quat[0], quat[1], quat[2], quat[3] = qw, qx, qy, qz
         ntags.value = n
+        raspi.value = bool(state["raspi"])
+        wifi.value = bool(state["wifi"])
         for i in range(TAG_BLOB_LEN):
             tag_blob[i] = 0
         off = 0
@@ -242,11 +293,20 @@ def _publish_state(
         last_notify.value = time.monotonic()
 
 
-def _clear_state(got_state: mp.Value, last_notify: mp.Value, ntags: mp.Value, lock: mp.Lock) -> None:
+def _clear_state(
+    got_state: mp.Value,
+    last_notify: mp.Value,
+    ntags: mp.Value,
+    raspi: mp.Value,
+    wifi: mp.Value,
+    lock: mp.Lock,
+) -> None:
     with lock:
         got_state.value = False
         last_notify.value = 0.0
         ntags.value = 0
+        raspi.value = False
+        wifi.value = False
 
 def _corners_to_pixels(corners: tuple[int, ...], tag_corner_scale: float, tag_origin: tuple[float, float]) -> list[tuple[float, float]]:
     """Undo Pi packing: pixel = corner / scale + origin (detect_atags.py inverse)."""
@@ -315,19 +375,34 @@ async def _ble_session(
     arm_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
+    arm_disabled: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
     quat: mp.Array,
     ntags: mp.Value,
     tag_blob: mp.Array,
+    raspi: mp.Value,
+    wifi: mp.Value,
+    ble_write_queue: mp.Queue,
     lock: mp.Lock,
 ) -> bool:
     def on_notify(_handle: int, data: bytearray) -> None:
         state = _unpack_robot_state(bytes(data))
         if state is None:
             return
-        _publish_state(state, got_state, last_notify, enc, quat, ntags, tag_blob, lock)
+        _publish_state(
+            state,
+            got_state,
+            last_notify,
+            enc,
+            quat,
+            ntags,
+            tag_blob,
+            raspi,
+            wifi,
+            lock,
+        )
         if log_state:
             print(_format_state_line(state), flush=True)
 
@@ -337,11 +412,17 @@ async def _ble_session(
     disconnect_event = asyncio.Event()
     disconnect_event.clear()
     print(f"Connecting to {dev_path}...", flush=True)
-    async with BleakClient(dev_path, disconnected_callback=on_disconnect) as client:
+    async with BleakClient(
+        dev_path, disconnected_callback=on_disconnect, timeout=20.0
+    ) as client:
         try:
             await client.exchange_mtu(512)
-        except Exception:
-            pass
+        except Exception as mtu_exc:
+            print(
+                f"MTU exchange skipped: {type(mtu_exc).__name__}: {mtu_exc!r}",
+                flush=True,
+            )
+        print("Subscribing to notify...", flush=True)
         await client.start_notify(CHAR_UUID, on_notify)
         print("Connected.", flush=True)
 
@@ -359,14 +440,30 @@ async def _ble_session(
                     print("No notify — reconnecting...", flush=True)
                     break
 
+                try:
+                    queued = ble_write_queue.get_nowait()
+                except queue.Empty:
+                    queued = None
+                if queued is not None:
+                    await client.write_gatt_char(CHAR_UUID, queued, response=True)
+                    last_sent = time.monotonic()
+                    continue
+
                 if now - last_sent >= TX_INTERVAL:
                     with lock:
                         if pending_ble_valid.value:
-                            payload = bytes(pending_ble[:CMD_LEN])
+                            n = (
+                                CMD_ACTUATOR_LEN
+                                if pending_ble[0] == CMD_ACTUATORS
+                                else CMD_RASPI_LEN
+                            )
+                            payload = bytes(pending_ble[:n])
                             pending_ble_valid.value = False
                         else:
-                            payload = _pack_robot_command(left, right, arm)
-                    assert len(payload) == CMD_LEN
+                            payload = _pack_robot_command(
+                                left, right, arm, arm_disabled=bool(arm_disabled.value)
+                            )
+                    assert len(payload) in (CMD_ACTUATOR_LEN, CMD_RASPI_LEN)
                     await client.write_gatt_char(CHAR_UUID, payload, response=True)
                     last_sent = time.monotonic()
                     continue
@@ -394,12 +491,16 @@ async def _ble_main(
     arm_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
+    arm_disabled: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
     quat: mp.Array,
     ntags: mp.Value,
     tag_blob: mp.Array,
+    raspi: mp.Value,
+    wifi: mp.Value,
+    ble_write_queue: mp.Queue,
     lock: mp.Lock,
 ) -> None:
     while not stop.is_set():
@@ -424,21 +525,29 @@ async def _ble_main(
                 arm_packed,
                 pending_ble,
                 pending_ble_valid,
+                arm_disabled,
                 got_state,
                 last_notify,
                 enc,
                 quat,
                 ntags,
                 tag_blob,
+                raspi,
+                wifi,
+                ble_write_queue,
                 lock,
             )
         except Exception as exc:
-            print(f"BLE error: {exc}", flush=True)
+            detail = f"{type(exc).__name__}: {exc!r}"
+            cause = exc.__cause__
+            if cause is not None:
+                detail += f" (caused by {type(cause).__name__}: {cause!r})"
+            print(f"BLE error: {detail}", flush=True)
             disconnected = False
         if disconnected:
             print("Disconnected.", flush=True)
 
-        _clear_state(got_state, last_notify, ntags, lock)
+        _clear_state(got_state, last_notify, ntags, raspi, wifi, lock)
         if stop.is_set():
             break
         print(f"Reconnecting in {reconnect_delay_s:.0f}s...", flush=True)
@@ -455,12 +564,16 @@ def _ble_worker(
     arm_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
+    arm_disabled: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
     quat: mp.Array,
     ntags: mp.Value,
     tag_blob: mp.Array,
+    raspi: mp.Value,
+    wifi: mp.Value,
+    ble_write_queue: mp.Queue,
     lock: mp.Lock,
 ) -> None:
     asyncio.run(
@@ -474,12 +587,16 @@ def _ble_worker(
             arm_packed,
             pending_ble,
             pending_ble_valid,
+            arm_disabled,
             got_state,
             last_notify,
             enc,
             quat,
             ntags,
             tag_blob,
+            raspi,
+            wifi,
+            ble_write_queue,
             lock,
         )
     )
@@ -509,8 +626,9 @@ class SO101Platform:
         self._arm_packed = mp.Array(
             "B", _pack_arm12([ARM_CENTER_RAW] * ARM_MOTOR_COUNT)
         )
-        self._pending_ble = mp.Array("B", CMD_LEN)
+        self._pending_ble = mp.Array("B", CMD_ACTUATOR_LEN)
         self._pending_ble_valid = mp.Value("b", False)
+        self._arm_disabled = mp.Value("b", False)
         self._got_state = mp.Value("b", False)
         self._last_notify = mp.Value("d", 0.0)
         self._enc = mp.Array("i", 2)
@@ -518,6 +636,9 @@ class SO101Platform:
         self._quat[0] = 1.0
         self._ntags = mp.Value("i", 0)
         self._tag_blob = mp.Array("B", TAG_BLOB_LEN)
+        self._raspi = mp.Value("b", False)
+        self._wifi = mp.Value("b", False)
+        self._ble_write_queue: mp.Queue[bytes] = mp.Queue()
         self._proc: mp.Process | None = None
 
         self._stream_proc: mp.Process | None = None
@@ -555,6 +676,16 @@ class SO101Platform:
                 float(self._quat[2]),
                 float(self._quat[3]),
             )
+
+    def getRaspiAlive(self) -> bool:
+        """True if ESP32 has received serial from the Pi recently."""
+        with self._lock:
+            return bool(self._raspi.value)
+
+    def getWifiConnected(self) -> bool:
+        """True if the Pi reported WiFi connected (0xFF serial ack)."""
+        with self._lock:
+            return bool(self._wifi.value)
 
     def getApriltagTags(self, estimate_tag_pose=False, camera_params=[1270, 1270, 640, 360], tag_size=3) -> AprilTagList:
         """Tag list from last notify (empty list if no state received yet).
@@ -607,13 +738,40 @@ class SO101Platform:
             self._left_cmd.value = max(-125, min(125, int(left)))
             self._right_cmd.value = max(-125, min(125, int(right)))
 
-    def _queue_ble_command(self, payload: bytes) -> None:
-        if len(payload) != CMD_LEN:
-            raise ValueError(f"BLE command must be {CMD_LEN} bytes, got {len(payload)}")
+    def disable(self) -> None:
+        """Release arm joints (torque off) so they can be moved by hand."""
         with self._lock:
+            self._arm_disabled.value = True
+
+    def enable(self) -> None:
+        """Drive arm joint positions from setSO101Position (default after construction)."""
+        with self._lock:
+            self._arm_disabled.value = False
+
+    def isArmEngaged(self) -> bool:
+        """True unless disable() was called."""
+        with self._lock:
+            return not bool(self._arm_disabled.value)
+
+    def _queue_ble_command(self, payload: bytes) -> None:
+        if len(payload) not in (CMD_ACTUATOR_LEN, CMD_RASPI_LEN):
+            raise ValueError(
+                f"BLE command must be {CMD_ACTUATOR_LEN} or {CMD_RASPI_LEN} bytes, "
+                f"got {len(payload)}"
+            )
+        with self._lock:
+            for i in range(CMD_ACTUATOR_LEN):
+                self._pending_ble[i] = 0
             for i, byte in enumerate(payload):
                 self._pending_ble[i] = byte
             self._pending_ble_valid.value = True
+
+    def connectToWifi(self, ssid: str, password: str) -> None:
+        """Send SSID and password to the Pi via ESP32 (BLE 'U' then 'P' packets)."""
+        if not self.running:
+            raise RuntimeError("Call start() before connectToWifi()")
+        self._ble_write_queue.put(_pack_wifi_user(ssid))
+        self._ble_write_queue.put(_pack_wifi_pass(password))
 
     def _stop_camera_stream_receiver(self) -> None:
         self._stream_dispatch_stop.set()
@@ -685,6 +843,9 @@ class SO101Platform:
 
         Returns the host IP sent to the Pi.
         """
+        if not self.getWifiConnected():
+            raise RuntimeError("WiFi not connected, cannot enable camera stream mode")
+
         self._stop_camera_stream_receiver()
 
         if host is None:
@@ -727,12 +888,16 @@ class SO101Platform:
                 self._arm_packed,
                 self._pending_ble,
                 self._pending_ble_valid,
+                self._arm_disabled,
                 self._got_state,
                 self._last_notify,
                 self._enc,
                 self._quat,
                 self._ntags,
                 self._tag_blob,
+                self._raspi,
+                self._wifi,
+                self._ble_write_queue,
                 self._lock,
             ),
             daemon=True,
@@ -745,4 +910,11 @@ class SO101Platform:
         if self._proc is not None:
             self._proc.join(timeout=3.0)
             self._proc = None
-        _clear_state(self._got_state, self._last_notify, self._ntags, self._lock)
+        _clear_state(
+            self._got_state,
+            self._last_notify,
+            self._ntags,
+            self._raspi,
+            self._wifi,
+            self._lock,
+        )
