@@ -15,7 +15,9 @@ JOINT_KEYS = ["J1", "J2", "J3", "J4", "J5", "J6"]
 ARM_MOTOR_COUNT = 6
 
 INST_SYNC_READ = 0x82
+INST_SYNC_WRITE = 0x83
 REG_PRESENT_POSITION = 0x38
+REG_TORQUE_ENABLE = 40
 DATA_LEN = 2
 RESP_FRAME_LEN = 8
 EXPECTED_RX = ARM_MOTOR_COUNT * RESP_FRAME_LEN
@@ -45,6 +47,31 @@ def _limits_from_tuples(tuples: list[tuple[int, int]]) -> list[JointLimits]:
     return [JointLimits(a, b) for a, b in tuples]
 
 
+def _build_sync_write_byte(ids: list[int], reg: int, values: list[int]) -> bytes:
+    packet = [
+        0xFF,
+        0xFF,
+        0xFE,
+        4 + 2 * len(ids),
+        INST_SYNC_WRITE,
+        reg,
+        1,
+    ]
+    for mid, val in zip(ids, values):
+        packet.extend([mid, val & 0xFF])
+    packet.append((~sum(packet[2:])) & 0xFF)
+    return bytes(packet)
+
+
+def _set_arm_torque(ser: serial.Serial, enabled: bool) -> None:
+    """STS Torque_Enable: 0 = backdrivable, 1 = holding."""
+    values = [1 if enabled else 0] * len(MOTOR_IDS)
+    pkt = _build_sync_write_byte(MOTOR_IDS, REG_TORQUE_ENABLE, values)
+    ser.reset_input_buffer()
+    ser.write(pkt)
+    ser.flush()
+
+
 def _so101_leader_worker(
     port: str,
     baud: int,
@@ -53,6 +80,7 @@ def _so101_leader_worker(
     follower_out: mp.Array,
     leader_out: mp.Array,
     valid: mp.Value,
+    arm_disabled: mp.Value,
     stop: mp.Event,
     poll_interval_s: float,
 ) -> None:
@@ -70,8 +98,15 @@ def _so101_leader_worker(
     ser.reset_input_buffer()
     print(f"Leader arm {port} @ {baud}", flush=True)
 
+    torque_engaged = not bool(arm_disabled.value)
+    _set_arm_torque(ser, torque_engaged)
     try:
         while not stop.is_set():
+            want_engaged = not bool(arm_disabled.value)
+            if want_engaged != torque_engaged:
+                _set_arm_torque(ser, want_engaged)
+                torque_engaged = want_engaged
+
             leader_raw = reader.sync_read(ser)
             follower_raws = reader.compute_follower_raws(leader_raw)
             if follower_raws is not None:
@@ -84,6 +119,8 @@ def _so101_leader_worker(
     except Exception as e:
         print(f"Leader process error: {e}", file=sys.stderr)
     finally:
+        if torque_engaged:
+            _set_arm_torque(ser, False)
         ser.close()
 
 
@@ -193,6 +230,7 @@ class SO101Leader:
         self._follower_raws = mp.Array("i", ARM_MOTOR_COUNT)
         self._leader_raws = mp.Array("i", ARM_MOTOR_COUNT)
         self._valid = mp.Value("b", False)
+        self._arm_disabled = mp.Value("b", True)  # backdrivable by default
         self._stop = mp.Event()
         self._proc: mp.Process | None = None
 
@@ -231,12 +269,28 @@ class SO101Leader:
                 self._follower_raws,
                 self._leader_raws,
                 self._valid,
+                self._arm_disabled,
                 self._stop,
                 self._poll_interval_s,
             ),
             daemon=True,
         )
         self._proc.start()
+
+    def disable(self) -> None:
+        """Release leader arm torque so joints can be moved by hand (default)."""
+        with self._lock:
+            self._arm_disabled.value = True
+
+    def enable(self) -> None:
+        """Engage leader arm torque (hold current position)."""
+        with self._lock:
+            self._arm_disabled.value = False
+
+    def isArmEngaged(self) -> bool:
+        """False by default until enable() is called."""
+        with self._lock:
+            return not bool(self._arm_disabled.value)
 
     def getPositions(self) -> list[int]:
         """Latest mapped follower joint raws (6 ints, J1..J6), or [] if none yet."""
