@@ -1,138 +1,204 @@
-#include "So101Arm.h"
-#include "HostSerial.h"
-#include <ESP32Servo.h>
-#include <Wire.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
+// BLE robot control (So101-Platform protocol), STS bus, QMI8658 IMU, ST7789 LCD
+
+#include <Arduino.h>
+#include <Arduino_GFX_Library.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLE2902.h>
-#include <string.h>
 #include <math.h>
-#include <U8g2lib.h>
+#include <string.h>
+
+#include "STSDriver.h"
+#include "HostSerial.h"
+#include "WS_QMI8658.h"
 #include "Madgwick.h"
 
-// Pins for ESP32 WROOM
-#define WIRE_SCL0 22
-#define WIRE_SDA0 21
-#define WIRE_SCL1 32
-#define WIRE_SDA1 33
-#define ARM_RX 17 // connect to SO101 RX
-#define ARM_TX 16 // connect to SO101 TX
+// Waveshare ESP32-S3-LCD-1.3 display + IMU
+Arduino_DataBus *bus = new Arduino_ESP32SPI(38 /* DC */, 39 /* CS */, 40 /* SCK */, 41 /* MOSI */,
+                                              GFX_NOT_DEFINED /* MISO */, FSPI);
+Arduino_GFX *gfx = new Arduino_ST7789(bus, 42 /* RST */, 1 /* rotation: 90° CW */, true /* IPS */, 240,
+                                        240, 0, 0, 0, 0);
+
+// STS serial bus on the 16-pin header (see Waveshare schematic GPIO_OUT / H2+H1).
+// ESP32 RX ← STS TX, ESP32 TX → STS RX
+#define ARM_RX 1   // ← STS TX
+#define ARM_TX 2   // → STS RX
 #define ARM_BAUD 1000000
-#define SERVO_LEFT 26
-#define SERVO_RIGHT 14
-#define AS5600_ADDR 0x36
-#define OLED_SCL 13
-#define OLED_SDA 5
 
-// Wire0 (21/22): MPU6050 + left AS5600. Wire1 (32/33): right AS5600.
-
-// BLE GATT (central connects by service/characteristic UUID).
-static const char *kName = "Capybara"; // Specify unique name like Capybara, Meerkat, Platypus, Hedgehog, Aardvark
+// BLE GATT
+static const char *kName = "Capybara";
 static const char *kService = "4fafc201-1fb5-459e-8fcc-c5c9c331d914";
 static const char *kChar = "beb5483e-36e1-4688-b7f2-e6a6a6d74324";
 
 BLECharacteristic *bleCh;
+static bool bleClientConnected = false;
 
 unsigned long prevBleTxMs = 0;
-unsigned long prevArmWriteMs = 0;
-unsigned long prevArmReadMs = 0;
-const long SO_TX_INTERVAL = 10; // 100Hz arm SYNC_WRITE
-const long SO_RX_INTERVAL = SO_TX_INTERVAL; // 100Hz arm SYNC_READ (independent of writes)
-const long BLE_RX_TIMEOUT = 250; // timeout after last BLE command
-const long BLE_TX_INTERVAL = 40; // 25Hz robot state notify
-
-static uint32_t lastCommandMs = 0;
+unsigned long prevBleRxMs = 0;
+unsigned long prevSTSWriteMs = 0;
+unsigned long prevSTSReadMs = 0;
+const long STS_TX_INTERVAL = 10;
+const long STS_RX_INTERVAL = STS_TX_INTERVAL;
+const long BLE_RX_TIMEOUT = 250;
+const long BLE_TX_INTERVAL = 40;
 
 #pragma pack(push, 1)
 struct RobotCommand {
-  int8_t left; // -125 to 125
-  int8_t right; // -125 to 125
-  uint8_t arm[9]; // STS goal position (u16), each position takes up 12bits - 12*6 = 72bits = 9bytes
+  uint8_t cmd;
+  int8_t left;
+  int8_t right;
+  uint8_t arm[9];
+  uint8_t enabled; // bit0=J1, bit1=J2, ...
 };
 
 struct AprilTagInfo {
   uint16_t tag_id;
-  int16_t tag_corners[8]; // (corners - origin) * 25
+  int16_t tag_corners[8];
 };
 
 struct RobotState {
-  uint8_t enc[3]; // encoders are 12 bit - 2 encoders = 24bits = 3bytes
-  uint8_t armPos[9]; // each position has a range [0, 4095] = 72bits for 6 = 9bytes
-  int16_t quat[4]; // w,x,y,z * 1000 (Madgwick q0..q3); identity [1000,0,0,0]
+  uint8_t wheelEnc[3];
+  uint8_t armPos[9];
+  int16_t quat[4];
   uint8_t ntags;
-  AprilTagInfo tags[10]; // max 10 tags
+  AprilTagInfo tags[10];
 };
 #pragma pack(pop)
+
+static_assert(sizeof(RobotCommand) == 13, "RobotCommand layout must match BLE host");
+static constexpr uint8_t kArmEnableMask = 0x3F; // bit0=J1 .. bit5=J6
+
+static constexpr uint8_t CMD_ACTUATORS = '0';
+static constexpr uint8_t CMD_TAG16H5 = '1';
+static constexpr uint8_t CMD_TAG25H9 = '2';
+static constexpr uint8_t CMD_TAG36H11 = '3';
+static constexpr uint8_t CMD_STREAM = 'A';
+// static constexpr uint8_t CMD_WIFIUSER = 'U';
+// static constexpr uint8_t CMD_WIFIPASS = 'P';
+// static constexpr uint8_t CMD_WIFI_TO_PI = 'W';
+static constexpr size_t RASPI_CMD_PAYLOAD_LEN = 7;
+// static constexpr size_t WIFI_CRED_MAX = 128;
+// static constexpr size_t WIFI_CRED_FRAME_MAX = 3 + 2 * (WIFI_CRED_MAX - 1);
 
 RobotCommand targets;
 RobotState st;
 
+// static char wifi_username[WIFI_CRED_MAX];
+// static char wifi_password[WIFI_CRED_MAX];
+// static uint8_t wifi_creds[WIFI_CRED_FRAME_MAX];
+
 HostSerial hostSerial(Serial, 1);
-So101Arm arm(2, ARM_RX, ARM_TX, ARM_BAUD);
-static bool armHaltSent = false;
-static int16_t gJointPos[So101Arm::kMotorCount];
-static uint16_t gJointRawPos[So101Arm::kMotorCount];
+static uint8_t raspi_alive = 0;
+// static uint8_t wifi_connected = 0;
 
-static uint16_t encRaw[2] = {0, 0};
-
-Servo servoLeft;
-Servo servoRight;
-
-// Bit‑bang I2C constructor
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C display(
-  U8G2_R0,        // rotation
-  OLED_SCL,       // SCL
-  OLED_SDA,       // SDA
-  U8X8_PIN_NONE   // reset
-);
-
-static inline void updateDisplay() {
-  display.clearBuffer();
-  display.setFont(u8g2_font_6x10_tf);
-  display.drawStr(0, 10, "Bluetooth Name:");
-
-  display.setFont(u8g2_font_10x20_tf);
-  display.drawStr(0, 40, kName);
-
-  display.sendBuffer();
-}
+STSDriver sts(2, ARM_RX, ARM_TX, ARM_BAUD);
+static bool stsHaltSent = false;
+static bool wheelVelocityPrimed = false;
+static uint8_t s_armTorqueMask = 0; // which arm joints currently have torque enabled
+static uint16_t gArmRawPos[STSDriver::kArmJointCount];
+static int16_t gServoReadPos[STSDriver::kMaxServos];
+static uint16_t gWheelRawPos[2] = {0, 0};
 
 static constexpr float MADGWICK_BETA = 0.06f;
-// Madgwick::updateIMU expects accel in g, gyro in rad/s (Adafruit reports m/s² and rad/s).
-static constexpr float MS2_TO_G = 1.0f / 9.80665f;
-Adafruit_MPU6050 mpu;
 Madgwick imuFilter(MADGWICK_BETA);
 static uint32_t imuMicrosPrev = 0;
-static bool imuReady = false;
+
+// static void sendWifiUserPass() {
+//   const size_t userLen = strlen(wifi_username);
+//   const size_t passLen = strlen(wifi_password);
+//   if (userLen == 0 || passLen == 0) {
+//     return;
+//   }
+//   if (userLen > 255 || passLen > 255) {
+//     return;
+//   }
+//   wifi_creds[0] = CMD_WIFI_TO_PI;
+//   wifi_creds[1] = (uint8_t)userLen;
+//   wifi_creds[2] = (uint8_t)passLen;
+//   memcpy(&wifi_creds[3], wifi_username, userLen);
+//   memcpy(&wifi_creds[3 + userLen], wifi_password, passLen);
+//   const size_t totalLen = 3 + userLen + passLen;
+//   hostSerial.writeBytes((void *)wifi_creds, (int)totalLen);
+//   wifi_username[0] = '\0';
+//   wifi_password[0] = '\0';
+// }
 
 struct CbServer : BLEServerCallbacks {
-  void onDisconnect(BLEServer *) { BLEDevice::startAdvertising(); }
+  void onConnect(BLEServer *) { bleClientConnected = true; }
+
+  void onDisconnect(BLEServer *) {
+    bleClientConnected = false;
+    BLEDevice::startAdvertising();
+  }
 };
 
 struct CbChar : BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) {
-    String v = c->getValue();
-    const size_t n = v.length();
-    if (n != sizeof(RobotCommand)) {
+    const size_t n = c->getLength();
+    if (n == 0) {
       return;
     }
-    memcpy(&targets, v.c_str(), sizeof(targets));
-    targets.left = (int8_t)constrain((int)targets.left, -125, 125);
-    targets.right = (int8_t)constrain((int)targets.right, -125, 125);
-    lastCommandMs = millis();
+    const uint8_t *buf = c->getData();
+
+    switch (buf[0]) {
+      case CMD_ACTUATORS:
+        if (n >= sizeof(RobotCommand)) {
+          memcpy(&targets, buf, sizeof(RobotCommand));
+        } else if (n >= 3) {
+          targets.cmd = CMD_ACTUATORS;
+          targets.left = (int8_t)buf[1];
+          targets.right = (int8_t)buf[2];
+        } else {
+          break;
+        }
+        targets.left = (int8_t)constrain((int)targets.left, -125, 125);
+        targets.right = (int8_t)constrain((int)targets.right, -125, 125);
+        prevBleRxMs = millis();
+        break;
+
+      case CMD_TAG16H5:
+      case CMD_TAG25H9:
+      case CMD_TAG36H11:
+      case CMD_STREAM:
+        if (n >= RASPI_CMD_PAYLOAD_LEN) {
+          // hostSerial.writeBytes((void *)buf, RASPI_CMD_PAYLOAD_LEN);
+        }
+        break;
+
+      // case CMD_WIFIUSER: {
+      //   const size_t copyLen = (n > 1) ? min(n - 1, WIFI_CRED_MAX - 1) : 0;
+      //   if (copyLen > 0) {
+      //     memcpy(wifi_username, buf + 1, copyLen);
+      //   }
+      //   wifi_username[copyLen] = '\0';
+      //   sendWifiUserPass();
+      //   break;
+      // }
+
+      // case CMD_WIFIPASS: {
+      //   const size_t copyLen = (n > 1) ? min(n - 1, WIFI_CRED_MAX - 1) : 0;
+      //   if (copyLen > 0) {
+      //     memcpy(wifi_password, buf + 1, copyLen);
+      //   }
+      //   wifi_password[copyLen] = '\0';
+      //   sendWifiUserPass();
+      //   break;
+      // }
+
+      default:
+        break;
+    }
   }
 };
 
 static CbServer cbServer;
 static CbChar cbChar;
 
-static void packArm12(const uint16_t in[So101Arm::kMotorCount], uint8_t packed[9]) {
+static void packArm12(const uint16_t in[STSDriver::kArmJointCount], uint8_t packed[9]) {
   memset(packed, 0, 9);
   int byteidx = 0;
   bool insert2 = true;
-  for (int i = 0; i < So101Arm::kMotorCount; i++) {
+  for (int i = 0; i < STSDriver::kArmJointCount; i++) {
     const uint16_t v = in[i];
     if (insert2) {
       packed[byteidx++] = (uint8_t)(v & 0xFF);
@@ -145,11 +211,17 @@ static void packArm12(const uint16_t in[So101Arm::kMotorCount], uint8_t packed[9
   }
 }
 
-static void unpackArm12(const uint8_t packed[9], uint16_t out[So101Arm::kMotorCount]) {
+static void packWheelEnc12(uint16_t left, uint16_t right, uint8_t out[3]) {
+  out[0] = (uint8_t)left;
+  out[1] = (uint8_t)(((left >> 8) & 0x0F) | ((right & 0x0F) << 4));
+  out[2] = (uint8_t)(right >> 4);
+}
+
+static void unpackArm12(const uint8_t packed[9], uint16_t out[STSDriver::kArmJointCount]) {
   int byteidx = 0;
   bool extract2 = true;
   uint16_t a, b = 0;
-  for (int i = 0; i < So101Arm::kMotorCount; i++) {
+  for (int i = 0; i < STSDriver::kArmJointCount; i++) {
     a = packed[byteidx++];
     if (extract2) {
       b = packed[byteidx++];
@@ -162,22 +234,126 @@ static void unpackArm12(const uint8_t packed[9], uint16_t out[So101Arm::kMotorCo
   }
 }
 
-// 2 x 12-bit LSB-first (same layout as first 3 bytes of packArm12).
-static inline void packEnc12(uint16_t left, uint16_t right, uint8_t out[3]) {
-  out[0] = (uint8_t)left;
-  out[1] = (uint8_t)(((left >> 8) & 0x0F) | ((right & 0x0F) << 4));
-  out[2] = (uint8_t)(right >> 4);
+static inline int16_t quatUnitToMilli(float q) {
+  return constrain((long)lroundf(q * 1000.0f), -32768, 32767);
+}
+
+static void driveArmJointsFromTargets() {
+  unpackArm12(targets.arm, gArmRawPos);
+
+  const uint8_t wantMask = targets.enabled & kArmEnableMask;
+  const uint8_t engageMask = (uint8_t)(wantMask & ~s_armTorqueMask);
+
+  uint8_t releaseIds[STSDriver::kArmJointCount];
+  uint8_t engageIds[STSDriver::kArmJointCount];
+  uint8_t driveIds[STSDriver::kArmJointCount];
+  int16_t drivePos[STSDriver::kArmJointCount];
+  uint8_t nRelease = 0;
+  uint8_t nEngage = 0;
+  uint8_t nDrive = 0;
+
+  for (uint8_t i = 0; i < STSDriver::kArmJointCount; i++) {
+    const uint8_t bit = (uint8_t)(1u << i);
+    const uint8_t id = (uint8_t)(i + 1);
+    if (engageMask & bit) {
+      engageIds[nEngage++] = id;
+    }
+    if (wantMask & bit) {
+      driveIds[nDrive] = id;
+      drivePos[nDrive] = (int16_t)gArmRawPos[i];
+      nDrive++;
+    } else {
+      releaseIds[nRelease++] = id;
+    }
+  }
+
+  if (nRelease > 0) {
+    sts.releaseTorque(releaseIds, nRelease);
+  }
+  if (nEngage > 0) {
+    sts.engageTorque(engageIds, nEngage);
+  }
+  if (nDrive > 0) {
+    sts.setAngles(driveIds, nDrive, drivePos);
+  }
+
+  s_armTorqueMask = wantMask;
+}
+
+static int16_t wheelSpeedToSts(int8_t speed) {
+  // static constexpr int16_t kStsMaxWheelSpeed = 3400;
+  // static constexpr int8_t kWheelCmdScale = 27; // ±125 BLE cmd → ±3375 STS (~±3400 max)
+  int16_t s = constrain((int16_t)speed * 27, -3400, 3400);
+  if (s >= 0) return s;
+  return (int16_t)((uint16_t)((uint16_t)(-s) | 0x8000u));
+}
+
+static void driveWheelVelocityFromTargets() {
+  if (!wheelVelocityPrimed && (targets.left != 0 || targets.right != 0)) {
+    // setup() may run before servo power is up; re-enter velocity mode on first drive.
+    sts.enableVelocityMode({7, 8});
+    wheelVelocityPrimed = true;
+  }
+  const int16_t wheelSpeed[2] = {wheelSpeedToSts(targets.left), wheelSpeedToSts(targets.right)};
+  sts.setSpeed({7, 8}, wheelSpeed);
+}
+
+// prevBleRxMs is updated in BLE onWrite (async); use signed delta so millis() wrap
+// or a stale snapshot cannot make bleActive false while the host is still streaming.
+static bool isBleActive(unsigned long now) {
+  if (prevBleRxMs == 0) {
+    return false;
+  }
+  return (long)(now - prevBleRxMs) < BLE_RX_TIMEOUT;
+}
+
+static void updateIMU() {
+  float ax, ay, az, gx, gy, gz, tempC;
+  if (!QMI8658_read(ax, ay, az, gx, gy, gz, tempC)) {
+    return;
+  }
+
+  const uint32_t nowUs = micros();
+  float dt = (nowUs - imuMicrosPrev) * 1e-6f;
+  imuMicrosPrev = nowUs;
+  if (dt <= 0.f || dt > 0.2f) {
+    return;
+  }
+
+  imuFilter.updateIMU(gx * DEG_TO_RAD, gy * DEG_TO_RAD, gz * DEG_TO_RAD, ax, ay, az, dt);
+}
+
+static void initDisplay() {
+  gfx->fillScreen(RGB565_BLACK);
+
+  gfx->setTextColor(RGB565_CYAN, RGB565_BLACK);
+  gfx->setTextSize(1);
+  gfx->setCursor(8, 8);
+  gfx->println("Bluetooth");
+
+  gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
+  gfx->setTextSize(2);
+  gfx->setCursor(8, 22);
+  gfx->println(kName);
 }
 
 void setup() {
-  hostSerial.begin(115200);
-  delay(200);
+  gfx->begin(40000000);
+  initDisplay();
+
+  // hostSerial.begin(115200);
 
   memset(&targets, 0, sizeof(targets));
   memset(&st, 0, sizeof(st));
+  // wifi_username[0] = '\0';
+  // wifi_password[0] = '\0';
+
+  QMI8658_Init();
+  imuMicrosPrev = micros();
+  st.quat[0] = 1000;
+  st.quat[1] = st.quat[2] = st.quat[3] = 0;
 
   BLEDevice::init(kName);
-  // Large enough for RobotState notify (AprilTag list + headers); central must negotiate up.
   BLEDevice::setMTU(512);
 
   BLEServer *srv = BLEDevice::createServer();
@@ -200,160 +376,83 @@ void setup() {
   a->setMaxPreferred(0x12);
   BLEDevice::startAdvertising();
 
-  Wire.begin(WIRE_SDA0, WIRE_SCL0);
-  Wire.setClock(400000);
-  Wire1.begin(WIRE_SDA1, WIRE_SCL1);
-  Wire1.setClock(400000);
-
-  if (mpu.begin(MPU6050_I2CADDR_DEFAULT, &Wire)) {
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-    delay(100);
-    imuMicrosPrev = micros();
-    imuReady = true;
-    st.quat[0] = 1000;
-    st.quat[1] = st.quat[2] = st.quat[3] = 0;
-  } else {
-    st.quat[0] = 1000;
-    st.quat[1] = st.quat[2] = st.quat[3] = 0;
-  }
-
-  servoLeft.attach(SERVO_LEFT);
-  servoRight.attach(SERVO_RIGHT);
-  servoLeft.writeMicroseconds((int)(targets.left * 4) + 1500);
-  servoRight.writeMicroseconds((int)(targets.right * 4) + 1500);
-
-  arm.begin();
-
-  display.begin();
-  updateDisplay();
-  delay(50);
-}
-
-static uint16_t getAS5600Reading(TwoWire &bus) {
-  bus.beginTransmission(AS5600_ADDR);
-  bus.write(0x0E); // RAW ANGLE register (high byte)
-  bus.endTransmission();
-
-  bus.requestFrom((uint8_t)AS5600_ADDR, (uint8_t)2);
-  if (bus.available() >= 2) {
-    uint16_t rawAngle = (uint16_t)bus.read() << 8;
-    rawAngle |= bus.read();
-    return rawAngle;
-  }
-  return (uint16_t)-1;
-}
-
-/** Left AS5600 + MPU on Wire0, right AS5600 on Wire1. */
-static void pollWheelEncoders() {
-  const uint16_t left = getAS5600Reading(Wire);
-  if (left != (uint16_t)-1) {
-    encRaw[0] = left & 0x0FFF;
-  }
-  const uint16_t right = getAS5600Reading(Wire1);
-  if (right != (uint16_t)-1) {
-    encRaw[1] = right & 0x0FFF;
-  }
-}
-
-static inline int16_t quatUnitToMilli(float q) {
-  return constrain((long)lroundf(q * 1000.0f), -32768, 32767);
-}
-
-static void updateIMU() {
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-  const uint32_t nowUs = micros();
-  float dt = (nowUs - imuMicrosPrev) * 1e-6f;
-  imuMicrosPrev = nowUs;
-  if (dt > 0.f && dt <= 0.2f) {
-    const float ax = a.acceleration.x * MS2_TO_G;
-    const float ay = a.acceleration.y * MS2_TO_G;
-    const float az = a.acceleration.z * MS2_TO_G;
-    const float gx = g.gyro.x;
-    const float gy = g.gyro.y;
-    const float gz = g.gyro.z;
-    imuFilter.updateIMU(gx, gy, gz, ax, ay, az, dt);
-  }
+  sts.begin();
+  sts.enableVelocityMode({7, 8});
 }
 
 void loop() {
-  unsigned long currentMillis = millis();
+  updateIMU();  
+  // message_t *msg = hostSerial.readMessage();
+  // if (msg == STIMEOUT) {
+  //   st.ntags = 0;
+  //   memset(st.tags, 0, 10 * sizeof(AprilTagInfo));
+  //   raspi_alive = 0;
+  //   // wifi_connected = 0;
+  // } else if (msg != nullptr && msg->length >= 1) {
+  //   raspi_alive = 1;
+  //   // if (msg->data[0] == 255) {
+  //   //   wifi_connected = 1;
+  //   // } else {
+  //   if (msg->data[0] != 255) {
+  //     st.ntags = msg->data[0];
+  //     if (st.ntags > 10) {
+  //       st.ntags = 10;
+  //     }
+  //     const size_t need = 1 + (size_t)st.ntags * sizeof(AprilTagInfo);
+  //     if (msg->length >= (int)need && st.ntags > 0) {
+  //       memcpy(st.tags, &msg->data[1], st.ntags * sizeof(AprilTagInfo));
+  //     } else if (st.ntags > 0) {
+  //       st.ntags = 0;
+  //     }
+  //     if (st.ntags < 10) {
+  //       memset(&st.tags[st.ntags], 0, (10 - st.ntags) * sizeof(AprilTagInfo));
+  //     }
+  //     st.ntags &= 0x1F;
+  //     st.ntags |= (raspi_alive << 7); // | (wifi_connected << 6); // combined message hack
+  //   }
+  //   // }
+  // }
 
-  // Update sensors
-  if (imuReady) updateIMU();
-  pollWheelEncoders();
-
-  // Pi -> USB serial HostSerial payload from detect_atags.py (same as test-serial-pi.ino loop)
-  message_t *msg = hostSerial.readMessage();
-  if (msg == STIMEOUT) {
-    st.ntags = 0;
-    memset(st.tags, 0, 10 * sizeof(struct AprilTagInfo));
-  } else if (msg != nullptr && msg->length >= 1) {
-    st.ntags = msg->data[0];
-    if (st.ntags > 10) {
-      st.ntags = 10;
-    }
-    const size_t need = 1 + (size_t)st.ntags * sizeof(AprilTagInfo);
-    if (msg->length >= (int)need && st.ntags > 0) {
-      memcpy(st.tags, &msg->data[1], st.ntags * sizeof(AprilTagInfo));
-    } else if (st.ntags > 0) {
-      st.ntags = 0;
-    }
-    if (st.ntags < 10) {
-      memset(&st.tags[st.ntags], 0, (10 - st.ntags) * sizeof(AprilTagInfo));
-    }
-  }
-
-  // Write motor commands
-  const bool bleActive = (lastCommandMs != 0) && (currentMillis - lastCommandMs < BLE_RX_TIMEOUT);
+  const unsigned long currentMs = millis();
+  const bool bleActive = isBleActive(currentMs);
   if (bleActive) {
-    armHaltSent = false;
-    if (currentMillis - prevArmWriteMs >= SO_TX_INTERVAL) {
-      prevArmWriteMs = currentMillis;
-      unpackArm12(targets.arm, gJointRawPos);
-      for (uint8_t i = 0; i < So101Arm::kMotorCount; i++) {
-        gJointPos[i] = (int16_t)gJointRawPos[i];
-      }
-      arm.setAngles(gJointPos);
+    stsHaltSent = false;
+    if (currentMs - prevSTSWriteMs >= STS_TX_INTERVAL) {
+      prevSTSWriteMs = currentMs;
+      driveArmJointsFromTargets();
+      driveWheelVelocityFromTargets();
     }
-  } else {
-    targets.left = 0;
-    targets.right = 0;
-    if (lastCommandMs != 0 && !armHaltSent) {
-      arm.halt();
-      armHaltSent = true;
+  } else if (prevBleRxMs != 0 && !stsHaltSent) {
+    sts.halt({1, 2, 3, 4, 5, 6, 7, 8});
+    if (s_armTorqueMask != 0) {
+      const uint8_t allArmIds[STSDriver::kArmJointCount] = {1, 2, 3, 4, 5, 6};
+      sts.releaseTorque(allArmIds, STSDriver::kArmJointCount);
+      s_armTorqueMask = 0;
+    }
+    stsHaltSent = true;
+  }
+
+  if (currentMs - prevSTSReadMs >= STS_RX_INTERVAL) {
+    prevSTSReadMs = currentMs;
+    if (sts.readAngles({1, 2, 3, 4, 5, 6, 7, 8}, gServoReadPos)) {
+      for (uint8_t i = 0; i < STSDriver::kArmJointCount; i++) {
+        gArmRawPos[i] = (uint16_t)(gServoReadPos[i] & 0x0FFF);
+      }
+      packArm12(gArmRawPos, st.armPos);
+
+      gWheelRawPos[0] = (uint16_t)(gServoReadPos[6] & 0x0FFF); // STS 7 = left
+      gWheelRawPos[1] = (uint16_t)(gServoReadPos[7] & 0x0FFF); // STS 8 = right
+      packWheelEnc12(gWheelRawPos[0], gWheelRawPos[1], st.wheelEnc);
     }
   }
 
-  if (currentMillis - prevArmReadMs >= SO_RX_INTERVAL) {
-    prevArmReadMs = currentMillis;
-    if (arm.readAngles(gJointPos)) {
-      for (uint8_t i = 0; i < So101Arm::kMotorCount; i++) {
-        gJointRawPos[i] = (uint16_t)(gJointPos[i] & 0x0FFF);
-      }
-      packArm12(gJointRawPos, st.armPos);
-    }
-  }
-
-  servoLeft.writeMicroseconds((int)(targets.left * 4) + 1500);
-  servoRight.writeMicroseconds((int)(targets.right * 4) + 1500);
-
-  if (currentMillis - prevBleTxMs >= BLE_TX_INTERVAL) {
-    prevBleTxMs = currentMillis;
-
-    packEnc12(encRaw[0], encRaw[1], st.enc);
-
-    if (imuReady) {
-      st.quat[0] = quatUnitToMilli(imuFilter.q0());
-      st.quat[1] = quatUnitToMilli(imuFilter.q1());
-      st.quat[2] = quatUnitToMilli(imuFilter.q2());
-      st.quat[3] = quatUnitToMilli(imuFilter.q3());
-    } else {
-      st.quat[0] = 1000;
-      st.quat[1] = st.quat[2] = st.quat[3] = 0;
-    }
+  const unsigned long notifyNow = millis();
+  if (bleClientConnected && notifyNow - prevBleTxMs >= BLE_TX_INTERVAL) {
+    prevBleTxMs = notifyNow;
+    st.quat[0] = quatUnitToMilli(imuFilter.q0());
+    st.quat[1] = quatUnitToMilli(imuFilter.q1());
+    st.quat[2] = quatUnitToMilli(imuFilter.q2());
+    st.quat[3] = quatUnitToMilli(imuFilter.q3());
     bleCh->setValue((uint8_t *)&st, sizeof(st));
     bleCh->notify();
   }

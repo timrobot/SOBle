@@ -53,6 +53,29 @@ systemctl --user disable detect-atags
 - **Serial permission** — add user to `dialout`, check `SERIAL_PORT`.
 - **Camera** — add user to `video`, reboot after install, ensure no other app uses the camera.
 
+### RTP/UDP camera stream (720p30 H.264)
+
+Uses **GStreamer** (`python3-gi`) with `libcamerasrc` and hardware **`v4l2h264enc`** (Pi Zero 2 W / libcamera). Cannot run at the same time as `detect_atags.py` (both need the camera).
+
+```bash
+sudo apt-get install -y python3-gi gstreamer1.0-tools \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad gstreamer1.0-libcamera
+
+chmod +x run_camera_stream.sh
+RTP_HOST=192.168.1.100 RTP_PORT=5000 ./run_camera_stream.sh
+```
+
+Environment variables: `RTP_HOST`, `RTP_PORT` (default broadcast `255.255.255.255:5000`), `STREAM_WIDTH`, `STREAM_HEIGHT`, `STREAM_FPS`, `STREAM_BITRATE`.
+
+Receive on a laptop:
+
+```bash
+gst-launch-1.0 -v udpsrc port=5000 \
+  caps='application/x-rtp,media=video,encoding-name=H264,payload=96' \
+  ! rtph264depay ! h264parse ! avdec_h264 ! autovideosink sync=false
+```
+
 ---
 
 ## Quick start: lead–follow (on your laptop)
