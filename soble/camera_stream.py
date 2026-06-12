@@ -22,20 +22,66 @@ _RTP_CAPS = (
 )
 
 
-def _decoder_element() -> str:
-    """Choose H.264 decoder element based on OS/arch.
+_DECODER_CACHE: str | None = None
 
-    - Windows / Linux: assume NVIDIA GPU is present → use nvh264dec.
-    - macOS: use vtdec_h264 (VideoToolbox / Metal).
-    - Other: fall back to avdec_h264 (software decode).
-    """
-    system = platform.system()
-    if system in ("Windows", "Linux"):
-        return "nvh264dec"
-    if system == "Darwin":
-        return "vtdec_h264"
-    # Anything else: generic software decoder.
+
+def _gst_element_available(name: str) -> bool:
+    """True if GStreamer can instantiate this element (Gst API, else gst-inspect-1.0)."""
+    try:
+        import gi
+
+        gi.require_version("Gst", "1.0")
+        from gi.repository import Gst  # noqa: E402
+
+        if not Gst.is_initialized():
+            Gst.init(None)
+        return Gst.ElementFactory.find(name) is not None
+    except Exception:
+        return _gst_element_available_inspect(name)
+
+
+def _gst_element_available_inspect(name: str) -> bool:
+    import shutil
+    import subprocess
+
+    gst_inspect = shutil.which("gst-inspect-1.0")
+    if gst_inspect is None:
+        return False
+    try:
+        return (
+            subprocess.run(
+                [gst_inspect, name],
+                capture_output=True,
+                timeout=5,
+                check=False,
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _pick_decoder(candidates: list[str]) -> str:
+    for element in candidates:
+        if _gst_element_available(element):
+            return element
     return "avdec_h264"
+
+
+def _decoder_element() -> str:
+    """Pick the best installed H.264 decoder for this OS (probed via GStreamer)."""
+    global _DECODER_CACHE
+    if _DECODER_CACHE is not None:
+        return _DECODER_CACHE
+
+    system = platform.system()
+    if system == "Darwin":
+        _DECODER_CACHE = _pick_decoder(["vtdec_h264", "avdec_h264"])
+    elif system in ("Windows", "Linux"):
+        _DECODER_CACHE = _pick_decoder(["nvh264dec", "avdec_h264"])
+    else:
+        _DECODER_CACHE = _pick_decoder(["avdec_h264"])
+    return _DECODER_CACHE
 
 
 def build_receive_pipeline(port: int = 5000) -> str:
@@ -44,6 +90,7 @@ def build_receive_pipeline(port: int = 5000) -> str:
     return (
         f'udpsrc port={int(port)} caps="{_RTP_CAPS}" ! '
         "rtph264depay ! "
+        "h264parse ! "
         "queue max-size-buffers=1 leaky=downstream ! "
         f"{decoder} ! "
         "queue max-size-buffers=1 leaky=downstream ! "
@@ -66,6 +113,8 @@ def _receive_stream_worker(
     from gi.repository import GLib, Gst  # noqa: E402
 
     Gst.init(None)
+    decoder = _decoder_element()
+    print(f"camera_stream: using H.264 decoder {decoder!r}", flush=True)
     pipeline = Gst.parse_launch(build_receive_pipeline(port))
     appsink = pipeline.get_by_name("sink")
     if appsink is None:
