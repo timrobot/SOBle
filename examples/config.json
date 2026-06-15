@@ -1,0 +1,33 @@
+{
+  "so101_leader": {
+    "joints": {
+      "shoulder_pan":   {"id": 1, "type": "ST3215", "zero_offset": 1972, "min_limit": 675,  "max_limit": 3270, "direction": 1},
+      "shoulder_lift":  {"id": 2, "type": "ST3215", "zero_offset": 1075, "min_limit": 1801, "max_limit": 350,  "direction": 1},
+      "elbow_flex":     {"id": 3, "type": "ST3215", "zero_offset": 1548, "min_limit": 553,  "max_limit": 2544, "direction": 1},
+      "wrist_flex":     {"id": 4, "type": "ST3215", "zero_offset": 1256, "min_limit": 105,  "max_limit": 2408, "direction": 1},
+      "wrist_roll":     {"id": 5, "type": "ST3215", "zero_offset": 4237, "min_limit": 2330, "max_limit": 6144, "direction": 1},
+      "gripper":        {"id": 6, "type": "ST3215", "zero_offset": 2653, "min_limit": 2046, "max_limit": 3261, "direction": 1}
+    }
+  },
+  "so101_follower": {
+    "joints": {
+      "shoulder_pan":   {"id": 1, "type": "ST3215", "zero_offset": 2029, "min_limit": 671,  "max_limit": 3387, "direction": 1},
+      "shoulder_lift":  {"id": 2, "type": "ST3215", "zero_offset": 2005, "min_limit": 831,  "max_limit": 3180, "direction": 1},
+      "elbow_flex":     {"id": 3, "type": "ST3215", "zero_offset": 1962, "min_limit": 861,  "max_limit": 3064, "direction": 1},
+      "wrist_flex":     {"id": 4, "type": "ST3215", "zero_offset": 2057, "min_limit": 913,  "max_limit": 3202, "direction": 1},
+      "wrist_roll":     {"id": 5, "type": "ST3215", "zero_offset": 1992, "min_limit": 78,   "max_limit": 3906, "direction": 1},
+      "gripper":        {"id": 6, "type": "ST3215", "zero_offset": 2695, "min_limit": 1974, "max_limit": 3417, "direction": 1}
+    }
+  },
+  "teleop_mapping": {
+    "type": "direct_proportional",
+    "scaling_factors": {
+      "shoulder_pan": 1.0,
+      "shoulder_lift": 1.0,
+      "elbow_flex": 1.0,
+      "wrist_flex": 1.0,
+      "wrist_roll": 1.0,
+      "gripper": 1.0
+    }
+  }
+}
