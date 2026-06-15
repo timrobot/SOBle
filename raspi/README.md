@@ -1,41 +1,87 @@
-# Raspberry Pi — AprilTag detection
+# Raspberry Pi — AprilTag detection & camera stream
 
-The Pi camera finds **tag16h5** tags and streams them to the robot over USB. Host software in the **`SOBle`** git repo (`pip install soble`) reads those tags over BLE—see that repo for APIs, examples, and teleop.
-
-## What the SO101 Platform is
-
-A small mobile robot with:
-
-- **Two drive wheels** (differential drive)
-- **SO-101 arm** on top (six joints)
-- **Wheel encoders** (left and right)
-- **IMU** (orientation quaternion)
-- **AprilTag detection** on the Pi camera (this directory)
+The Pi camera finds **tag16h5** tags and streams them to the robot over USB. Host software in the **SOBle** repo (`pip install soble`) reads tags and can request an RTP camera stream over BLE—see that repo for APIs and examples.
 
 ## Pi setup
 
+### 1. Camera (`/boot/firmware/config.txt`)
+
+```ini
+# Automatically load overlays for detected cameras
+camera_auto_detect=0
+dtoverlay=imx708
+
+dtoverlay=vc4-kms-v3d,cma-128
+```
+
+Reboot after editing.
+
+### 2. Hardware H.264 encoder
+
+Enable the `bcm2835-codec` module for `v4l2h264enc` (used by the RTP stream).
+
+`/etc/modprobe.d/bcm2835-codec.conf`:
+
+```
+options bcm2835-codec
+```
+
+`/etc/modules` — add:
+
+```
+bcm2835-codec
+```
+
+Reboot after editing.
+
+### 3. Packages
+
+One install covers AprilTag detection (`detect_atags.py`) and GStreamer camera streaming (`camera_stream.py`).
+
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3-picamera2 python3-opencv python3-apriltag python3-serial python3-numpy
+sudo apt-get install -y \
+  python3-picamera2 python3-libcamera \
+  python3-opencv python3-apriltag python3-serial python3-numpy \
+  python3-gi gstreamer1.0-tools \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad gstreamer1.0-libcamera
+
 sudo usermod -aG video,dialout "$USER"
 ```
 
-Log out and back in. Clone the repo to e.g. `~/SO101Base`.
+Log out and back in (or reboot). Clone the repo to e.g. `~/SO101Base`.
+
+| Component | Packages |
+|-----------|----------|
+| Pi camera / AprilTags | `python3-picamera2`, `python3-libcamera`, `python3-opencv`, `python3-apriltag` |
+| USB serial to ESP32 | `python3-serial` |
+| RTP send (`camera_stream.py`) | `python3-gi`, `gstreamer1.0-*`, `gstreamer1.0-libcamera` |
+
+---
+
+## AprilTag detection (`detect_atags.py`)
+
+Forwards tag detections to the ESP32 over USB. Used with `viz-apriltags.py` on a laptop.
 
 ### Run manually
 
 ```bash
-cd ~/SO101Base/raspi
+cd ~/SO101Base/SOBle/raspi
 chmod +x run_detect_atags.sh
 ./run_detect_atags.sh
 ```
 
-Optional port: `SERIAL_PORT=/dev/ttyACM0 ./run_detect_atags.sh`
+Optional serial device:
+
+```bash
+SERIAL_PORT=/dev/ttyACM0 ./run_detect_atags.sh
+```
 
 ### Autostart at login
 
 ```bash
-cd ~/SO101Base/raspi
+cd ~/SO101Base/SOBle/raspi
 chmod +x install-detect-atags-service.sh run_detect_atags.sh
 ./install-detect-atags-service.sh
 journalctl --user -u detect-atags -f
@@ -48,27 +94,25 @@ systemctl --user stop detect-atags
 systemctl --user disable detect-atags
 ```
 
-### Pi troubleshooting
+---
 
-- **Serial permission** — add user to `dialout`, check `SERIAL_PORT`.
-- **Camera** — add user to `video`, reboot after install, ensure no other app uses the camera.
+## RTP/UDP camera stream (`camera_stream.py`)
 
-### RTP/UDP camera stream (720p30 H.264)
+Sends **720p30 H.264** over RTP/UDP via GStreamer (`libcamerasrc` → `v4l2h264enc` → `rtph264pay` → `udpsink`). Target: Pi Zero 2 W with libcamera.
 
-Uses **GStreamer** (`python3-gi`) with `libcamerasrc` and hardware **`v4l2h264enc`** (Pi Zero 2 W / libcamera). Cannot run at the same time as `detect_atags.py` (both need the camera).
+**Cannot run at the same time as `detect_atags.py`** — both need the camera. `detect_atags.py` starts/stops the stream when it receives a BLE-forwarded `CMD_STREAM` (`'A'`) from the host.
+
+### Run manually (Pi)
 
 ```bash
-sudo apt-get install -y python3-gi gstreamer1.0-tools \
-  gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-  gstreamer1.0-plugins-bad gstreamer1.0-libcamera
-
+cd ~/SO101Base/SOBle/raspi
 chmod +x run_camera_stream.sh
 RTP_HOST=192.168.1.100 RTP_PORT=5000 ./run_camera_stream.sh
 ```
 
 Environment variables: `RTP_HOST`, `RTP_PORT` (default broadcast `255.255.255.255:5000`), `STREAM_WIDTH`, `STREAM_HEIGHT`, `STREAM_FPS`, `STREAM_BITRATE`.
 
-Receive on a laptop:
+### Receive on a laptop (GStreamer CLI)
 
 ```bash
 gst-launch-1.0 -v udpsrc port=5000 \
@@ -76,11 +120,32 @@ gst-launch-1.0 -v udpsrc port=5000 \
   ! rtph264depay ! h264parse ! avdec_h264 ! autovideosink sync=false
 ```
 
+### Receive via SOBle (BLE → Pi → RTP)
+
+On the host (needs GStreamer receive deps — same `python3-gi` + plugin packages as above, plus a decoder such as `gstreamer1.0-plugins-good` / `gstreamer1.0-libav`):
+
+```bash
+pip install "soble @ git+https://github.com/timrobot/SOBle.git@master"
+cd SOBle/examples
+python open-camera-stream.py
+```
+
+The host sends **its own LAN IP and UDP port** (default `5000`) to the Pi; the Pi streams H.264 to that address.
+
 ---
 
-## Quick start: lead–follow (on your laptop)
+## Troubleshooting
 
-See the **SOBle** repository README. Summary:
+- **Serial permission** — user in `dialout`; check `SERIAL_PORT` (`/dev/ttyUSB0` default).
+- **Camera** — user in `video`; reboot after install; only one process may use the camera.
+- **Stream won't start** — confirm WiFi on the Pi (`nmcli`); ESP32 USB serial bridge must forward `CMD_STREAM` to `detect_atags.py`.
+- **GStreamer** — `gst-inspect-1.0 libcamerasrc` and `gst-inspect-1.0 v4l2h264enc` should succeed on the Pi; `bcm2835-codec` loaded (`lsmod | grep bcm2835`).
+
+---
+
+## Quick start: lead–follow (laptop)
+
+See the **SOBle** repository README.
 
 ```bash
 pip install "soble @ git+https://github.com/timrobot/SOBle.git@master"
@@ -89,20 +154,20 @@ git clone https://github.com/timrobot/SOBle.git && cd SOBle/examples
 python lead-follow.py
 ```
 
-Leader arm on USB (pass serial port to the example script), robot BLE name `Capybara`; example joint mapping is `examples/angular_config.json` in the SOBle repo.
+Leader arm on USB; robot BLE name `Capybara`; joint mapping in `examples/angular_config.json`.
 
 ---
 
-## Quick start: view AprilTags (on your laptop)
+## Quick start: view AprilTags (laptop)
 
-1. Start detection on the Pi (above).
+1. Start detection on the Pi (`./run_detect_atags.sh` or autostart service).
 2. Hold a printed **tag16h5** in front of the Pi camera.
 3. On the host:
 
 ```bash
 pip install "soble @ git+https://github.com/timrobot/SOBle.git@master"
 git clone https://github.com/timrobot/SOBle.git && cd SOBle/examples
-python viz_apriltags.py /dev/ttyACM0
+python viz-apriltags.py
 ```
 
-You should see tag outlines and bitmap overlays on the 1280×720 view when tags are detected.
+You should see tag outlines and bitmap overlays when tags are detected.

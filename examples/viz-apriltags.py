@@ -113,6 +113,7 @@ def pygame_loop(
     font = pygame.font.Font(None, 28)
     clock = pygame.time.Clock()
     view = pygame.Surface((FRAME_W, FRAME_H))
+    arm_following = False
 
     while running.is_set():
         for event in pygame.event.get():
@@ -129,8 +130,16 @@ def pygame_loop(
         right = max(-125, min(125, int(round(yaw * turn - fwd * motor))))
 
         platform.setLeftRightMotors(left, right)
+
         positions = leader.getPositions()
-        platform.setSO101Position(positions)
+        if positions:
+            if not arm_following:
+                platform.enable()
+                arm_following = True
+            platform.setSO101Position(positions)
+        elif arm_following:
+            platform.disable()
+            arm_following = False
 
         leader_hud = leader.status_line()
         tags_viz = platform.getApriltagTags()
@@ -146,6 +155,7 @@ def pygame_loop(
             else "waiting for notify..."
         )
         status = f"L={left:4d} R={right:4d}  {rx}"
+        status += "  arm=following" if arm_following else "  arm=off (waiting for leader)"
         if tags_viz:
             status += f"  tags={len(tags_viz)}"
 
@@ -191,6 +201,7 @@ def main() -> int:
     platform = SO101Platform(args.name)
     leader.start()
     platform.start()
+    platform.disable()
 
     try:
         pygame_loop(running, args.motor, args.turn, leader, platform)
