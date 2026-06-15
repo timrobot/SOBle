@@ -1,6 +1,6 @@
 # SOBle - SO101 Platform Control Package over Bluetooth
 
-![SO101 Platform](media/Platform.png)
+![SO101 Platform](media/Platform.jpg)
 
 The So101 Platform is a simple chassis with two wheels for differential drive and a couple of sensors to help with several different autonomous algorithms. These sensors include
 

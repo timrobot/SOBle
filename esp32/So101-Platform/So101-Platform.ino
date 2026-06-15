@@ -341,7 +341,7 @@ void setup() {
   gfx->begin(40000000);
   initDisplay();
 
-  // hostSerial.begin(115200);
+  hostSerial.begin(115200);
 
   memset(&targets, 0, sizeof(targets));
   memset(&st, 0, sizeof(st));

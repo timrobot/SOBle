@@ -39,24 +39,17 @@ def build_pipeline(
     width: int = 1280,
     height: int = 720,
     fps: int = 30,
-    bitrate: int = 2_500_000,
+    bitrate: int = 3_000_000,
 ) -> str:
     """GStreamer pipeline string: libcamerasrc → v4l2h264enc → RTP/UDP.
 
-    - Profile: Main (h264_profile=4) for good compression/compat
-    - Level: 4.1 (h264_level=13) — standard for 720p/1080p hardware decode
-    - Bitrate: ~2.5 Mbps default for 720p30 over Wi‑Fi
-    - Keyframe period: ~0.5s (I-frame every fps/2 frames) for lower RTP/UDP latency
+    - Bitrate: ~3 Mbps default for 720p30 over WiFi
     """
-    # Shorter GOP (half-second) for faster recovery on loss / join.
-    keyint = max(1, fps // 2)
     return (
-        "libcamerasrc ! "
-        f"video/x-raw,width={width},height={height},framerate={fps}/1 ! "
-        "v4l2h264enc extra-controls="
-        f'"controls, h264_profile=4, h264_level=13, '
-        f"video_bitrate_mode=0, video_bitrate={bitrate}, "
-        f"repeat_sequence_header=1, h264_i_frame_period={keyint}\" ! "
+        "libcamerasrc af-mode=continuous ! "
+        f"video/x-raw,width={width},height={height},framerate={fps}/1,format=NV12 ! "
+        f"v4l2h264enc device=/dev/video11 extra-controls=\"controls,video_bitrate={bitrate}\" ! "
+        "video/x-h264,level=(string)4 ! "
         "rtph264pay config-interval=1 pt=96 ! "
         f"udpsink host={host} port={port} sync=false"
     )
@@ -123,6 +116,6 @@ def stop_camera_stream(process: mp.Process) -> None:
     process.join()
 
 if __name__ == "__main__":
-    process = run_camera_stream("255.255.255.255", 5000, 1280, 720, 30, 4000000)
+    process = run_camera_stream("255.255.255.255", 5000, 1280, 720, 30, 3000000)
     time.sleep(10)
     stop_camera_stream(process)
