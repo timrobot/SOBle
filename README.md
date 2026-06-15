@@ -38,27 +38,6 @@ platform.stop()
 leader.stop()
 ```
 
-`load_config` accepts either:
-
-- **Standard SO101** — `"so101_leader"` / `"so101_follower"`, each with a `"joints"` object (`min_limit` / `max_limit` per joint, keyed by name and sorted by motor `id`)
-- **minified** — `"leader"` / `"follower"` with **J1…J6** as `[min, max]` pairs (see `examples/min_config.json`)
-
----
-
-## Examples
-
-There are a couple of examples to help you get started on your laptop if you just want to see if everything is working.
-
-
-| Script                           | What it does                                |
-| -------------------------------- | ------------------------------------------- |
-| `examples/lead-follow.py`        | Leader → follower joint mirror; wheels at 0 |
-| `examples/viz-apriltags.py`      | WASD drive, leader mirror, tag overlay      |
-| `examples/open-camera-stream.py` | WiFi setup + RTP camera preview (`cv2`)     |
-
-
-AprilTag overlays need the robot’s Pi camera running tag detection and forwarding over BLE (separate Pi setup on the robot).
-
 ---
 
 ## Sourcing parts
@@ -68,10 +47,10 @@ The following table lists the electronics you will need to purchase in addition 
 
 | Part name                                                 | Qty | Unit Cost | Buy Link                                                                                                 |
 | --------------------------------------------------------- | --- | --------- | -------------------------------------------------------------------------------------------------------- |
-| Feetech STS3215 continuous-rotation servo                 | 2   | $12       | [Alibaba](https://www.alibaba.com/product-detail/Top-Seller-Low-Cost-Feetech-STS3215_1600999461525.html) |
+| Feetech STS3215 continuous-rotation servo                 | 2   | $12       | [Alibaba](https://www.alibaba.com/product-detail/Top-Seller-Low-Cost-Feetech-STS3215_1600999461525.html)                  |
 | 7.4 V 2S LiPo battery (5200 mAh)                          | 1   | $36       | [Amazon](https://www.amazon.com/Zeee-Battery-5200mAh-Vehicles-Airplane/dp/B092CZGW2P)                    |
 | Mini LiPo balance charger/discharger                      | 1   | $39       | [Amazon](https://www.amazon.com/B6-Battery-Charger-Discharger-Connectors/dp/B0F2H3XR6S)                  |
-| Waveshare ESP32-S3-LCD-1.3                                | 1   | $13       | [Waveshare](https://www.waveshare.com/esp32-s3-lcd-1.3.htm) (1.3″ LCD + QMI8658 IMU)                     |
+| Waveshare ESP32-S3-LCD-1.3                                | 1   | $13       | [Waveshare](https://www.waveshare.com/esp32-s3-lcd-1.3.htm) (Standard version)                                                  |
 | Barrel Connector (5.5x2.1) Male                           | 1   | $4        | [Amazon](https://www.amazon.com/Connector-Male-Female-Connectors-Security/dp/B0DVL9NDD1)                 |
 | UBEC 5V 3A                                                | 1   | $8        | [Amazon](https://www.amazon.com/jussming-Adjustable-UBEC-Regulator-Controllers/dp/B0GRGGM2T4)            |
 | USB-C female to 2-screw terminal                          | 1   | $8        | [Amazon](https://www.amazon.com/cablecc-Repair-Solderless-Connector-Terminal/dp/B0FY2HXYVF)              |
@@ -90,6 +69,22 @@ The **SO101 follower arm** (Feetech servos and its own controller) is not includ
 If you still need arm servos, order the two drive **STS3215** units from the table at the same time as the arm servos to save on shipping.
 
 Once you have printed all your parts and acquired the electronics, follow the instructions in [assembly/](assembly/).
+
+---
+
+## Examples
+
+There are a couple of examples to help you get started on your laptop if you just want to see if everything is working.
+
+
+| Script                           | What it does                                |
+| -------------------------------- | ------------------------------------------- |
+| [`examples/lead-follow.py`](examples/lead-follow.py)        | Leader → follower joint mirror; wheels at 0 |
+| [`examples/viz-apriltags.py`](examples/viz-apriltags.py)      | WASD drive, leader mirror, tag overlay      |
+| [`examples/open-camera-stream.py`](examples/open-camera-stream.py) | WiFi setup + RTP camera preview (`cv2`)     |
+
+
+AprilTag overlays need the robot’s Pi camera running tag detection and forwarding over BLE (separate Pi setup on the robot).
 
 ---
 
@@ -115,6 +110,10 @@ leader.load_config("config.json")  # or pass config_path= in the constructor
 | `getArmPositions()`                                                                              | `list[int]`                                   | **6** follower-mapped joint raws **0 … 4095**, or `**[]`** if not ready.                                                                                                 |
 | `setArmPositions(joints)`                                                                        | `None`                                        | Engage leader torque, or pass `**[]`** to release (backdrivable; default).                                                                                               |
 
+`load_config` accepts either:
+
+- **Standard SO101** — `"so101_leader"` / `"so101_follower"`, each with a `"joints"` object (`min_limit` / `max_limit` per joint, keyed by name and sorted by motor `id`)
+- **minified** — `"leader"` / `"follower"` with **J1…J6** as `[min, max]` pairs (see `examples/min_config.json`)
 
 ## Code reference — Class `SO101Platform`
 
@@ -143,7 +142,7 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 | `getArmPositions()`               | `list[int]`                         | **6** raw encoder values **J1 … J6** from follower arm; `**[]`** if no state yet.            |
 | `getEncoders()`                   | `tuple[int, int]`                   | `(left, right)`, each **0 … 4095**.                                                          |
 | `getIMUQuaternion()`              | `tuple[float, float, float, float]` | Unit quaternion **(w, x, y, z)**.                                                            |
-| `getIMURPH()`                     | `tuple[float, float, float]`        | Roll, pitch, heading in **degrees** (Madgwick quaternion on ESP32).                          |
+| `getIMURPH()`                     | `tuple[float, float, float]`        | Roll, pitch, heading in **degrees**                                                              |
 | `setLeftRightMotors(left, right)` | —                                   | Each **−125 … 125** (clamped).                                                               |
 | `setArmPositions(joints)`         | —                                   | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. Pass `**[]`** to disengage arm. |
 
