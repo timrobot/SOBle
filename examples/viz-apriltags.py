@@ -6,7 +6,6 @@ import threading
 from pathlib import Path
 
 from soble import SO101Leader, SO101Platform
-from soble.so101_leader import JOINT_KEYS
 
 import cv2
 import numpy as np
@@ -101,19 +100,16 @@ def draw_reconstructed_tags(
 
 def pygame_loop(
     running: threading.Event,
-    motor: int,
-    turn: int,
     leader: SO101Leader,
     platform: SO101Platform,
 ) -> None:
     pygame.init()
     pygame.display.set_caption("BLE teleop — WASD drive | ESC or Q to quit")
-    hud_height = 56
+    hud_height = 32
     screen = pygame.display.set_mode((FRAME_W, FRAME_H + hud_height))
     font = pygame.font.Font(None, 28)
     clock = pygame.time.Clock()
     view = pygame.Surface((FRAME_W, FRAME_H))
-    arm_following = False
 
     while running.is_set():
         for event in pygame.event.get():
@@ -126,22 +122,13 @@ def pygame_loop(
         keys = pygame.key.get_pressed()
         fwd = (1 if keys[pygame.K_w] else 0) - (1 if keys[pygame.K_s] else 0)
         yaw = (1 if keys[pygame.K_d] else 0) - (1 if keys[pygame.K_a] else 0)
-        left = max(-125, min(125, int(round(yaw * turn + fwd * motor))))
-        right = max(-125, min(125, int(round(yaw * turn - fwd * motor))))
+        left = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE + fwd * MOTOR_SPEED_SCALE))))
+        right = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE - fwd * MOTOR_SPEED_SCALE))))
 
         platform.setLeftRightMotors(left, right)
+        positions = leader.getArmPositions()
+        platform.setArmPositions(positions)
 
-        positions = leader.getPositions()
-        if positions:
-            if not arm_following:
-                platform.enable()
-                arm_following = True
-            platform.setSO101Position(positions)
-        elif arm_following:
-            platform.disable()
-            arm_following = False
-
-        leader_hud = leader.status_line()
         tags_viz = platform.getApriltagTags()
         notify_age = platform.last_notify_age_s()
 
@@ -155,15 +142,13 @@ def pygame_loop(
             else "waiting for notify..."
         )
         status = f"L={left:4d} R={right:4d}  {rx}"
-        status += "  arm=following" if arm_following else "  arm=off (waiting for leader)"
+        status += "  arm=following" if positions else "  arm=off (waiting for leader)"
         if tags_viz:
             status += f"  tags={len(tags_viz)}"
 
         screen.fill((30, 30, 30))
         screen.blit(view, (0, 0))
         screen.blit(font.render(status, True, (220, 220, 220)), (8, FRAME_H + 8))
-        hud = leader_hud[:90] + ("..." if len(leader_hud) > 90 else "")
-        screen.blit(font.render(hud, True, (180, 200, 180)), (8, FRAME_H + 30))
         pygame.display.flip()
         clock.tick(60)
 
@@ -178,33 +163,21 @@ def main() -> int:
         default=Path(__file__).resolve().parent / "angular_config.json",
         help="angular_config.json (default: examples/angular_config.json)",
     )
-    p.add_argument("--leader_port", "-p", help="Leader arm serial device, e.g. /dev/ttyACM0", default="/dev/ttyACM0")
-    p.add_argument("--name", "-n", help="Robot name", default="Capybara")
-    p.add_argument("--motor", type=int, default=MOTOR_SPEED_SCALE)
-    p.add_argument("--turn", type=int, default=TURN_SPEED_SCALE)
+    p.add_argument("--leader_port", "-p", default="/dev/ttyACM0", help="Leader serial port")
+    p.add_argument("--name", "-n", default="Capybara", help="Robot BLE name")
     args = p.parse_args()
 
-    leader_limits, follower_limits = SO101Leader.load_config(args.config)
     print(f"Config: {args.config}")
-    for i, key in enumerate(JOINT_KEYS):
-        l, f = leader_limits[i], follower_limits[i]
-        print(
-            f"  {key}: leader [{l.min_val}, {l.max_val}]  "
-            f"follower [{f.min_val}, {f.max_val}]  "
-            f"ratio={f.range / l.range:.4f}"
-        )
 
     running = threading.Event()
     running.set()
 
-    leader = SO101Leader(args.leader_port, leader_limits, follower_limits)
+    leader = SO101Leader(args.leader_port)
+    leader.load_config(args.config)
     platform = SO101Platform(args.name)
-    leader.start()
-    platform.start()
-    platform.disable()
 
     try:
-        pygame_loop(running, args.motor, args.turn, leader, platform)
+        pygame_loop(running, leader, platform)
     finally:
         running.clear()
         platform.stop()
