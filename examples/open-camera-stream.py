@@ -13,10 +13,8 @@ if __name__ == "__main__":
         cv2.imshow("SO101 camera", frame)
         cv2.waitKey(1)
 
-    platform.start()
-
     try:
-        host = platform.enableCameraStreamMode(onFrameCallback=on_frame)
+        host = platform.enableCameraStreamMode(on_frame)
         print(f"Stream requested to {host}:5000 — press Q or Esc to quit")
 
         while True:

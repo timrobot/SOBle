@@ -2,19 +2,16 @@
 from soble import SO101Leader, SO101Platform
 
 if __name__ == "__main__":
-    leader_limits, follower_limits = SO101Leader.load_config("angular_config.json")
-
-    leader = SO101Leader("/dev/ttyACM0", leader_limits, follower_limits)
+    leader = SO101Leader("/dev/ttyACM0")
+    leader.load_config("angular_config.json")
     platform = SO101Platform("Capybara", log_state=True)
 
-    leader.start()
-    platform.start()
     platform.setLeftRightMotors(0, 0)
 
     try:
         while True:
-            positions = leader.getPositions()
-            platform.setSO101Position(positions)
+            positions = leader.getArmPositions()
+            platform.setArmPositions(positions)
     except KeyboardInterrupt:
         pass
     finally:
