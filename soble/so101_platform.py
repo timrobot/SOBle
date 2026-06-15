@@ -20,6 +20,7 @@ import numpy as np
 from bleak import BleakClient, BleakScanner
 
 from soble import camera_stream as host_camera_stream
+from soble.arm_joints import parse_arm_joints
 
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331d914"
 CHAR_UUID = "beb5483e-36e1-4688-b7f2-e6a6a6d74324"
@@ -264,6 +265,7 @@ def _publish_state(
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
+    arm_raw: mp.Array,
     quat: mp.Array,
     ntags: mp.Value,
     tag_blob: mp.Array,
@@ -277,6 +279,8 @@ def _publish_state(
     with lock:
         enc[0] = enc_l
         enc[1] = enc_r
+        for i, v in enumerate(state["arm"]):
+            arm_raw[i] = v
         quat[0], quat[1], quat[2], quat[3] = qw, qx, qy, qz
         ntags.value = n
         raspi.value = bool(state["raspi"])
@@ -375,10 +379,11 @@ async def _ble_session(
     arm_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
-    arm_disabled: mp.Value,
+    arm_positions_valid: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
+    arm_raw: mp.Array,
     quat: mp.Array,
     ntags: mp.Value,
     tag_blob: mp.Array,
@@ -396,6 +401,7 @@ async def _ble_session(
             got_state,
             last_notify,
             enc,
+            arm_raw,
             quat,
             ntags,
             tag_blob,
@@ -460,8 +466,10 @@ async def _ble_session(
                             payload = bytes(pending_ble[:n])
                             pending_ble_valid.value = False
                         else:
+                            with lock:
+                                torque_off = not bool(arm_positions_valid.value)
                             payload = _pack_robot_command(
-                                left, right, arm, arm_disabled=bool(arm_disabled.value)
+                                left, right, arm, arm_disabled=torque_off
                             )
                     assert len(payload) in (CMD_ACTUATOR_LEN, CMD_RASPI_LEN)
                     await client.write_gatt_char(CHAR_UUID, payload, response=True)
@@ -491,10 +499,11 @@ async def _ble_main(
     arm_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
-    arm_disabled: mp.Value,
+    arm_positions_valid: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
+    arm_raw: mp.Array,
     quat: mp.Array,
     ntags: mp.Value,
     tag_blob: mp.Array,
@@ -525,10 +534,11 @@ async def _ble_main(
                 arm_packed,
                 pending_ble,
                 pending_ble_valid,
-                arm_disabled,
+                arm_positions_valid,
                 got_state,
                 last_notify,
                 enc,
+                arm_raw,
                 quat,
                 ntags,
                 tag_blob,
@@ -564,10 +574,11 @@ def _ble_worker(
     arm_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
-    arm_disabled: mp.Value,
+    arm_positions_valid: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
+    arm_raw: mp.Array,
     quat: mp.Array,
     ntags: mp.Value,
     tag_blob: mp.Array,
@@ -587,10 +598,11 @@ def _ble_worker(
             arm_packed,
             pending_ble,
             pending_ble_valid,
-            arm_disabled,
+            arm_positions_valid,
             got_state,
             last_notify,
             enc,
+            arm_raw,
             quat,
             ntags,
             tag_blob,
@@ -628,10 +640,11 @@ class SO101Platform:
         )
         self._pending_ble = mp.Array("B", CMD_ACTUATOR_LEN)
         self._pending_ble_valid = mp.Value("b", False)
-        self._arm_disabled = mp.Value("b", False)
+        self._arm_positions_valid = mp.Value("b", False)
         self._got_state = mp.Value("b", False)
         self._last_notify = mp.Value("d", 0.0)
         self._enc = mp.Array("i", 2)
+        self._arm_raw = mp.Array("i", ARM_MOTOR_COUNT)
         self._quat = mp.Array("d", 4)
         self._quat[0] = 1.0
         self._ntags = mp.Value("i", 0)
@@ -653,6 +666,8 @@ class SO101Platform:
         self._stream_dispatch_thread: threading.Thread | None = None
         self._on_frame_callback: Callable[[np.ndarray], None] | None = None
 
+        self.start()
+
     @property
     def running(self) -> bool:
         return self._proc is not None and self._proc.is_alive()
@@ -667,6 +682,13 @@ class SO101Platform:
         with self._lock:
             return int(self._enc[0]), int(self._enc[1])
 
+    def getArmPositions(self) -> list[int]:
+        """Six joint raw encoder values (J1..J6, 0..4095) from last robot notify."""
+        with self._lock:
+            if not self._got_state.value:
+                return []
+            return [int(self._arm_raw[i]) for i in range(ARM_MOTOR_COUNT)]
+
     def getIMUQuaternion(self) -> tuple[float, float, float, float]:
         """Unit quaternion (w, x, y, z)."""
         with self._lock:
@@ -676,6 +698,10 @@ class SO101Platform:
                 float(self._quat[2]),
                 float(self._quat[3]),
             )
+
+    def getIMURPH(self) -> tuple[float, float, float]:
+        """Roll, pitch, heading in degrees (from onboard Madgwick quaternion)."""
+        return _quat_to_rph_deg(*self.getIMUQuaternion())
 
     def getRaspiAlive(self) -> bool:
         """True if ESP32 has received serial from the Pi recently."""
@@ -687,13 +713,18 @@ class SO101Platform:
         with self._lock:
             return bool(self._wifi.value)
 
-    def getApriltagTags(self, estimate_tag_pose=False, camera_params=[1270, 1270, 640, 360], tag_size=3) -> AprilTagList:
+    def getApriltagTags(
+        self,
+        estimate_tag_pose=False,
+        camera_params=(940.48, 940.48, 640, 360),
+        tag_size=3,
+    ) -> AprilTagList:
         """Tag list from last notify (empty list if no state received yet).
         If estimate_tag_pose is True, the tag list will be estimated from the tag corners.
 
         Args:
             estimate_tag_pose: Whether to estimate the tag pose from the tag corners.
-            camera_params: A tuple of (focal_length, focal_length, image_width, image_height).
+            camera_params: ``(fx, fy, cx, cy)`` intrinsics; default matches IMX708 (~940.48 px focal length, 640×360 principal point).
             tag_size: The size of the tag (cm or inches or meters)
 
         Returns:
@@ -727,31 +758,24 @@ class SO101Platform:
                     poses.append((tag_id, corners, R, tvec))
             return poses
 
-    def setSO101Position(self, joints: list[int]) -> None:
-        packed = _pack_arm12(joints)
+    def setArmPositions(
+        self, joints: list[int] | tuple[int, ...] | np.ndarray
+    ) -> None:
+        """Drive arm joints, or pass ``[]`` to release torque."""
+        parsed = parse_arm_joints(joints)
         with self._lock:
+            if parsed is None:
+                self._arm_positions_valid.value = False
+                return
+            packed = _pack_arm12(parsed)
             for i, byte in enumerate(packed):
                 self._arm_packed[i] = byte
+            self._arm_positions_valid.value = True
 
     def setLeftRightMotors(self, left: int, right: int) -> None:
         with self._lock:
             self._left_cmd.value = max(-125, min(125, int(left)))
             self._right_cmd.value = max(-125, min(125, int(right)))
-
-    def disable(self) -> None:
-        """Release arm joints (torque off) so they can be moved by hand."""
-        with self._lock:
-            self._arm_disabled.value = True
-
-    def enable(self) -> None:
-        """Drive arm joint positions from setSO101Position (default after construction)."""
-        with self._lock:
-            self._arm_disabled.value = False
-
-    def isArmEngaged(self) -> bool:
-        """True unless disable() was called."""
-        with self._lock:
-            return not bool(self._arm_disabled.value)
 
     def _queue_ble_command(self, payload: bytes) -> None:
         if len(payload) not in (CMD_ACTUATOR_LEN, CMD_RASPI_LEN):
@@ -767,7 +791,8 @@ class SO101Platform:
             self._pending_ble_valid.value = True
 
     def connectToWifi(self, ssid: str, password: str) -> None:
-        """Send SSID and password to the Pi via ESP32 (BLE 'U' then 'P' packets)."""
+        """Send SSID and password to the Pi via ESP32 (BLE 'U' then 'P' packets).
+        Note: Experimental — do not use for now."""
         if not self.running:
             raise RuntimeError("Call start() before connectToWifi()")
         self._ble_write_queue.put(_pack_wifi_user(ssid))
@@ -805,15 +830,12 @@ class SO101Platform:
             if seq == last_seq:
                 continue
             last_seq = seq
-            cb = self._on_frame_callback
-            if cb is None:
-                continue
             frame = (
                 np.frombuffer(self._frame_buf, dtype=np.uint8, count=nbytes)
                 .reshape(shape)
                 .copy()
             )
-            cb(frame)
+            self._on_frame_callback(frame)
 
     def setTagDetectionMode(self, family: str) -> None:
         """Forward tag-detection mode to the Pi ('tag16h5', 'tag25h9', 'tag36h11'). Stops host RTP receiver."""
@@ -830,16 +852,17 @@ class SO101Platform:
 
     def enableCameraStreamMode(
         self,
+        onFrameCallback: Callable[[np.ndarray], None],
+        *,
         host: str | None = None,
         port: int = 5000,
-        onFrameCallback: Callable[[np.ndarray], None] | None = None,
     ) -> str:
         """Forward RTP stream command to the Pi and receive H.264 on this host (UDP port).
 
         Args:
+            onFrameCallback: Called on a background thread for each BGR frame (1280×720).
             host: Destination IP for the Pi RTP sender; default is this PC's LAN IP.
             port: UDP port (default 5000).
-            onFrameCallback: Called on a background thread for each BGR frame (1280×720).
 
         Returns the host IP sent to the Pi.
         """
@@ -860,19 +883,19 @@ class SO101Platform:
             self._frame_lock,
             self._stream_stop,
         )
-        if onFrameCallback is not None:
-            self._stream_dispatch_stop.clear()
-            self._stream_dispatch_thread = threading.Thread(
-                target=self._stream_frame_dispatch_loop,
-                name="so101-camera-frame-dispatch",
-                daemon=True,
-            )
-            self._stream_dispatch_thread.start()
+        self._stream_dispatch_stop.clear()
+        self._stream_dispatch_thread = threading.Thread(
+            target=self._stream_frame_dispatch_loop,
+            name="so101-camera-frame-dispatch",
+            daemon=True,
+        )
+        self._stream_dispatch_thread.start()
 
         self._queue_ble_command(_pack_raspi_ble_command(CMD_STREAM, host, port))
         return host
 
     def start(self) -> None:
+        """Start (or restart) the BLE worker. Called automatically from ``__init__``."""
         if self._proc is not None and self._proc.is_alive():
             return
         self._stop.clear()
@@ -888,10 +911,11 @@ class SO101Platform:
                 self._arm_packed,
                 self._pending_ble,
                 self._pending_ble_valid,
-                self._arm_disabled,
+                self._arm_positions_valid,
                 self._got_state,
                 self._last_notify,
                 self._enc,
+                self._arm_raw,
                 self._quat,
                 self._ntags,
                 self._tag_blob,

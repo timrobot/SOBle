@@ -8,7 +8,11 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+import numpy as np
 import serial
+
+from soble.arm_joints import parse_arm_joints
 
 MOTOR_IDS = [1, 2, 3, 4, 5, 6]
 JOINT_KEYS = ["J1", "J2", "J3", "J4", "J5", "J6"]
@@ -41,6 +45,61 @@ class JointLimits:
 
 def _limits_to_tuples(limits: list[JointLimits]) -> list[tuple[int, int]]:
     return [(lim.min_val, lim.max_val) for lim in limits]
+
+
+def _normalize_limit_pair(min_val: int, max_val: int) -> JointLimits:
+    if max_val < min_val:
+        max_val += WRAP_OFFSET
+    return JointLimits(min_val, max_val)
+
+
+def _limits_from_j1_config(cfg: dict) -> tuple[list[JointLimits], list[JointLimits]]:
+    leader: list[JointLimits] = []
+    follower: list[JointLimits] = []
+    for key in JOINT_KEYS:
+        l_min, l_max = cfg["leader"][key]
+        f_min, f_max = cfg["follower"][key]
+        leader.append(_normalize_limit_pair(int(l_min), int(l_max)))
+        follower.append(_normalize_limit_pair(int(f_min), int(f_max)))
+    return leader, follower
+
+
+def _limits_from_so101_arm(arm_cfg: dict) -> list[JointLimits]:
+    joints = arm_cfg.get("joints")
+    if not isinstance(joints, dict):
+        raise ValueError('so101 arm config must have a "joints" object')
+
+    by_id: dict[int, JointLimits] = {}
+    for name, joint in joints.items():
+        if not isinstance(joint, dict):
+            raise ValueError(f'joint {name!r} must be an object')
+        if "id" not in joint or "min_limit" not in joint or "max_limit" not in joint:
+            raise ValueError(
+                f'joint {name!r} must include "id", "min_limit", and "max_limit"'
+            )
+        motor_id = int(joint["id"])
+        if motor_id not in MOTOR_IDS:
+            raise ValueError(f'joint {name!r} has invalid id {motor_id}')
+        if motor_id in by_id:
+            raise ValueError(f'duplicate motor id {motor_id} in joints')
+        by_id[motor_id] = _normalize_limit_pair(
+            int(joint["min_limit"]),
+            int(joint["max_limit"]),
+        )
+
+    if len(by_id) != ARM_MOTOR_COUNT:
+        raise ValueError(
+            f"expected {ARM_MOTOR_COUNT} joints with ids 1..{ARM_MOTOR_COUNT}, "
+            f"got {len(by_id)}"
+        )
+    return [by_id[motor_id] for motor_id in MOTOR_IDS]
+
+
+def _limits_from_so101_config(cfg: dict) -> tuple[list[JointLimits], list[JointLimits]]:
+    return (
+        _limits_from_so101_arm(cfg["so101_leader"]),
+        _limits_from_so101_arm(cfg["so101_follower"]),
+    )
 
 
 def _limits_from_tuples(tuples: list[tuple[int, int]]) -> list[JointLimits]:
@@ -78,7 +137,6 @@ def _so101_leader_worker(
     leader_lim_tuples: list[tuple[int, int]],
     follower_lim_tuples: list[tuple[int, int]],
     follower_out: mp.Array,
-    leader_out: mp.Array,
     valid: mp.Value,
     arm_disabled: mp.Value,
     stop: mp.Event,
@@ -111,9 +169,8 @@ def _so101_leader_worker(
             follower_raws = reader.compute_follower_raws(leader_raw)
             if follower_raws is not None:
                 with valid.get_lock():
-                    for i, m_id in enumerate(MOTOR_IDS):
-                        leader_out[i] = leader_raw.get(m_id, -1)
-                        follower_out[i] = follower_raws[i]
+                    for i, raw in enumerate(follower_raws):
+                        follower_out[i] = raw
                     valid.value = True
             time.sleep(poll_interval_s)
     except Exception as e:
@@ -209,53 +266,73 @@ class _SO101LeaderReader:
 
 
 class SO101Leader:
-    """Leader reader in a background process; parent polls via getPositions()."""
+    """Leader reader in a background process; parent polls via getArmPositions()."""
 
     def __init__(
         self,
         port: str,
-        leader_limits: list[JointLimits],
-        follower_limits: list[JointLimits],
-        baud: int = DEFAULT_BAUD,
+        leader_limits: list[JointLimits] | None = None,
+        follower_limits: list[JointLimits] | None = None,
         *,
+        config_path: str | Path | None = None,
+        baud: int = DEFAULT_BAUD,
         poll_interval_s: float = POLL_INTERVAL,
     ) -> None:
         self._port = port
         self._baud = baud
-        self._leader_limits = leader_limits
-        self._follower_limits = follower_limits
         self._poll_interval_s = poll_interval_s
+
+        if config_path is not None:
+            if leader_limits is not None or follower_limits is not None:
+                raise ValueError("pass config_path or explicit limits, not both")
+            self._apply_limits_from_path(config_path)
+        elif leader_limits is not None and follower_limits is not None:
+            self._leader_limits = leader_limits
+            self._follower_limits = follower_limits
+        elif leader_limits is not None or follower_limits is not None:
+            raise TypeError("leader_limits and follower_limits must both be provided")
+        else:
+            self._leader_limits = []
+            self._follower_limits = []
 
         self._lock = mp.Lock()
         self._follower_raws = mp.Array("i", ARM_MOTOR_COUNT)
-        self._leader_raws = mp.Array("i", ARM_MOTOR_COUNT)
         self._valid = mp.Value("b", False)
         self._arm_disabled = mp.Value("b", True)  # backdrivable by default
         self._stop = mp.Event()
         self._proc: mp.Process | None = None
 
+        if len(self._leader_limits) == ARM_MOTOR_COUNT:
+            self.start()
+
     @staticmethod
     def limits_from_config(cfg: dict) -> tuple[list[JointLimits], list[JointLimits]]:
         """Build leader/follower limit lists from a config dict (see README)."""
-        leader: list[JointLimits] = []
-        follower: list[JointLimits] = []
-        for key in JOINT_KEYS:
-            l_min, l_max = cfg["leader"][key]
-            f_min, f_max = cfg["follower"][key]
-            if l_max < l_min:
-                l_max += WRAP_OFFSET
-            if f_max < f_min:
-                f_max += WRAP_OFFSET
-            leader.append(JointLimits(l_min, l_max))
-            follower.append(JointLimits(f_min, f_max))
-        return leader, follower
+        if "so101_leader" in cfg and "so101_follower" in cfg:
+            return _limits_from_so101_config(cfg)
+        if "leader" in cfg and "follower" in cfg:
+            return _limits_from_j1_config(cfg)
+        raise ValueError(
+            'config must include "leader"/"follower" (J1..J6) or '
+            '"so101_leader"/"so101_follower" (joints with min_limit/max_limit)'
+        )
 
-    @staticmethod
-    def load_config(path: str | Path) -> tuple[list[JointLimits], list[JointLimits]]:
+    def _apply_limits_from_path(self, path: str | Path) -> None:
         with Path(path).open(encoding="utf-8") as f:
-            return SO101Leader.limits_from_config(json.load(f))
+            self._leader_limits, self._follower_limits = self.limits_from_config(
+                json.load(f)
+            )
+
+    def load_config(self, path: str | Path) -> None:
+        """Load leader/follower joint limits from a JSON file (see README)."""
+        running = self._proc is not None and self._proc.is_alive()
+        if running:
+            self.stop()
+        self._apply_limits_from_path(path)
+        self.start()
 
     def start(self) -> None:
+        """Start (or restart) the serial reader. Called automatically from ``__init__``."""
         if self._proc is not None and self._proc.is_alive():
             return
         self._stop.clear()
@@ -267,7 +344,6 @@ class SO101Leader:
                 _limits_to_tuples(self._leader_limits),
                 _limits_to_tuples(self._follower_limits),
                 self._follower_raws,
-                self._leader_raws,
                 self._valid,
                 self._arm_disabled,
                 self._stop,
@@ -277,39 +353,20 @@ class SO101Leader:
         )
         self._proc.start()
 
-    def disable(self) -> None:
-        """Release leader arm torque so joints can be moved by hand (default)."""
+    def setArmPositions(
+        self, joints: list[int] | tuple[int, ...] | np.ndarray
+    ) -> None:
+        """Engage leader torque, or pass ``[]`` to release (backdrivable)."""
+        parsed = parse_arm_joints(joints)
         with self._lock:
-            self._arm_disabled.value = True
+            self._arm_disabled.value = parsed is None
 
-    def enable(self) -> None:
-        """Engage leader arm torque (hold current position)."""
-        with self._lock:
-            self._arm_disabled.value = False
-
-    def isArmEngaged(self) -> bool:
-        """False by default until enable() is called."""
-        with self._lock:
-            return not bool(self._arm_disabled.value)
-
-    def getPositions(self) -> list[int]:
+    def getArmPositions(self) -> list[int]:
         """Latest mapped follower joint raws (6 ints, J1..J6), or [] if none yet."""
         with self._lock:
             if not self._valid.value:
                 return []
             return list(self._follower_raws[:])
-
-    def status_line(self) -> str:
-        """HUD line with leader (L) and follower (F) raw values."""
-        with self._lock:
-            if not self._valid.value:
-                return ""
-            leader = list(self._leader_raws[:])
-            follower = list(self._follower_raws[:])
-        parts = [
-            f"J{m_id} L={leader[i]} F={follower[i]}" for i, m_id in enumerate(MOTOR_IDS)
-        ]
-        return " | ".join(parts)
 
     def stop(self) -> None:
         self._stop.set()
