@@ -6,25 +6,6 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 ---
 
-## Contents
-
-- [Step 1 — Omni-directional ball bearing](#step-1--omni-directional-ball-bearing)
-- [Step 2 — Omni-directional rollers](#step-2--omni-directional-rollers)
-- [Step 3 — Rear omni-wheel assembly](#step-3--rear-omni-wheel-assembly)
-- [Step 4 — Traction wheel servo](#step-4--traction-wheel-servo)
-- [Step 5 — Traction wheel bearing](#step-5--traction-wheel-bearing)
-- [Step 6 — Front wheel assembly](#step-6--front-wheel-assembly)
-- [Step 7 — Mounting the SO101 arm](#step-7--mounting-the-so101-arm)
-- [Step 8 — Download SOBle and flash firmware](#step-8--download-soble-and-flash-firmware)
-- [Step 9 — Preparing the cables and LCD pins](#step-9--preparing-the-cables-and-lcd-pins)
-- [Step 10 — Mounting the Electronics](#step-10--mounting-the-electronics)
-- [Step 11 — Wiring the arm UART and power](#step-11--wiring-the-arm-uart-and-power)
-- [Step 12 — Powering up the robot](#step-12--powering-up-the-robot)
-- [Raspi camera attachment *(optional)*](#raspi-camera-attachment-optional)
-- [Quick reference — all steps](#quick-reference--all-steps)
-
----
-
 ## Step 1 — Omni-directional ball bearing
 
 
@@ -267,12 +248,12 @@ If the board is already on the robot, **do not power the robot**. The driver boa
 
    ```bash
    cd examples
-   python viz-apriltags.py -p /dev/tty.usbmodem575E0032081 -n Capybara -c angular_config.json
+   python viz-apriltags.py -p /dev/tty.usbmodem575E0032081 -n Capybara -c config.json
    ```
 
    - `-p` — *Leader port* (Linux e.g. `/dev/ttyACM0`, Windows e.g. `COM3`, macOS e.g. `/dev/tty.usbmodem575E0032081`)
    - `-n` — *Robot name* (e.g. `Capybara`)
-   - `-c` — *Config file* — leader/follower joint limits (see [angular_config.json](../examples/angular_config.json))
+   - `-c` — *Config file* — leader/follower joint limits (see [config.json](../examples/config.json))
 
 You can now control the robot using **WASD** and the leader arm.
 
