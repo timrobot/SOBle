@@ -14,12 +14,12 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 - [Step 4 — Traction wheel servo](#step-4--traction-wheel-servo)
 - [Step 5 — Traction wheel bearing](#step-5--traction-wheel-bearing)
 - [Step 6 — Front wheel assembly](#step-6--front-wheel-assembly)
-- [Step 7 — Chassis assembly](#step-7--chassis-assembly)
-- [Step 8 — Mounting the SO101 arm](#step-8--mounting-the-so101-arm)
-- [Step 9 — Download SOBle and flash firmware](#step-9--download-soble-and-flash-firmware)
-- [Step 10a — Preparing the cables and LCD pins](#step-10a--preparing-the-cables-and-lcd-pins)
-- [Step 10b — Wiring the arm UART and power](#step-10b--wiring-the-arm-uart-and-power)
-- [Step 11 — Powering up the robot](#step-11--powering-up-the-robot)
+- [Step 7 — Mounting the SO101 arm](#step-7--mounting-the-so101-arm)
+- [Step 8 — Download SOBle and flash firmware](#step-8--download-soble-and-flash-firmware)
+- [Step 9 — Preparing the cables and LCD pins](#step-9--preparing-the-cables-and-lcd-pins)
+- [Step 10 — Mounting the Electronics](#step-10--mounting-the-electronics)
+- [Step 11 — Wiring the arm UART and power](#step-11--wiring-the-arm-uart-and-power)
+- [Step 12 — Powering up the robot](#step-12--powering-up-the-robot)
 - [Raspi camera attachment *(optional)*](#raspi-camera-attachment-optional)
 - [Quick reference — all steps](#quick-reference--all-steps)
 
@@ -153,6 +153,7 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 | Front grip wheel | 1 | 3D printed |
 | Axle clip | 1 | 3D printed |
 | Penta bolt | 1 | 3D printed |
+| Main bolt | 2 | 3D printed |
 
 
 **Assembly**
@@ -167,27 +168,44 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 3. Repeat **Steps 4–6** for the other side.
 
----
+4. Use **two main bolts** to attach the **back chassis** to the **front chassis**.
 
-## Step 7 — Chassis assembly
-
-*Todo — parts table and assembly instructions.*
+   <img src="6d.png" height="280" alt="Step 6d">
 
 ---
 
-## Step 8 — Mounting the SO101 arm
-
-<img src="Step8.png" height="280" alt="Step 8">
+## Step 7 — Mounting the SO101 arm
 
 Build the follower arm per the official [LeRobot SO-101 assembly guide](https://huggingface.co/docs/lerobot/so101) (motor setup, joints, gripper).
 
-Mount the **base of the SO101 follower arm** to the chassis (printed mount / tower in the diagram) using the lock-pins.
 
-*Todo — complete the mounting instructions.*
+| Part | Qty | Notes |
+| ---- | --- | ----- |
+| Lock pin | 4 | 3D printed |
+| Pin half nut | 1 | 3D printed |
+| Pin lock plate | 1 | 3D printed |
+| Pin lock bolt | 1 | 3D printed |
+
+
+**Assembly**
+
+1. Mount the **base of the SO101 follower arm** to the chassis. Insert all **four lock pins** all the way into the holes.
+
+   <img src="7a.png" height="280" alt="Step 7a">
+
+2. Insert the **pin half nut** on one of the pins on the bottom of the chassis and rotate it until it reaches the back.
+
+   <img src="7b.png" height="280" alt="Step 7b">
+
+3. Push the **pin lock plate** into place and fasten using the **pin lock bolt**.
+
+   <img src="7c.png" height="280" alt="Step 7c">
+
+4. Repeat **7.2 and 7.3** for all pins.
 
 ---
 
-## Step 9 — Download SOBle and flash firmware
+## Step 8 — Download SOBle and flash firmware
 
 If the board is already on the robot, **do not power the robot**. The driver board may be damaged if the robot is powered without a shared ground.
 
@@ -205,12 +223,13 @@ If the board is already on the robot, **do not power the robot**. The driver boa
    ```
 
 3. Plug a **USB-C** cable from your computer to the LCD board.
-4. **Flash firmware** — Open `esp32/So101-Platform/` in the Arduino IDE (or your usual ESP32 toolchain), select the **ESP32-S3** board and the correct serial port, and upload the sketch. It should take around one minute.
-5. Unplug the USB-C cable from the LCD board.
+4. **Flash firmware** — Open `esp32/So101-Platform/` in the Arduino IDE (or your usual ESP32 toolchain). Add the **esp32** boards library from the boards manager.
+5. On the port, select the **ESP32-S3 Dev Module** board type, click on the connected serial port, and upload the sketch. It should take around one minute.
+6. Unplug the USB-C cable from the LCD board.
 
 ---
 
-## Step 10a — Preparing the cables and LCD pins
+## Step 9 — Preparing the cables and LCD pins
 
 1. Insert the barrel connector and UBEC power wires into the XT60 female screw terminal, as shown in the diagram.
 2. *Optional.* If you are planning to use the Raspi camera or you have *hooked jumpers*, you will have to do this. Be warned that this step is **irreversible**:
@@ -220,9 +239,13 @@ If the board is already on the robot, **do not power the robot**. The driver boa
 
 ---
 
-## Step 10b — Wiring the arm UART and power
+## Step 10 — Mounting the Electronics
 
-<img src="Wiring.png" height="280" alt="Wiring">
+*Todo — parts table and assembly instructions.*
+
+---
+
+## Step 11 — Wiring the arm UART and power
 
 1. Attach the jumper headers (or hooks) to the LCB board's right side (diagram A), and then wire them to the driver board (diagram B).
 2. LCD connection options:
@@ -234,9 +257,7 @@ If the board is already on the robot, **do not power the robot**. The driver boa
 
 ---
 
-## Step 11 — Powering up the robot
-
-<img src="DCDC.png" height="280" alt="DCDC power wiring">
+## Step 12 — Powering up the robot
 
 > **WARNING:** When you start the example below, the **follower arm on the robot** will immediately engage to match the joint mapping in your config file. Keep hands clear of the arm and make sure it has room to move before running.
 
@@ -289,13 +310,13 @@ More Pi details: [raspi/README.md](../raspi/README.md).
 | 3 | Rear omni-wheel assembly | [3a.png](3a.png) · [3b.png](3b.png) |
 | 4 | Traction wheel servo | [4a.png](4a.png) · [4b.png](4b.png) · [4c.png](4c.png) |
 | 5 | Traction wheel bearing | [5a.png](5a.png) · [5b.png](5b.png) · [5c.png](5c.png) |
-| 6 | Front wheel assembly | [6a.png](6a.png) · [6b.png](6b.png) |
-| 7 | Chassis assembly | — |
-| 8 | Mount SO101 follower arm | [Step8.png](Step8.png) |
-| 9 | Clone SOBle, pip install, flash ESP32-S3 firmware | — |
-| 10a | Prepare cables and LCD header pins | — |
-| 10b | Wire arm UART, UBEC, and LCD power | [Wiring.png](Wiring.png) |
-| 11 | Power on, run `viz-apriltags.py` | [DCDC.png](DCDC.png) |
+| 6 | Front wheel assembly | [6a.png](6a.png) · [6b.png](6b.png) · [6d.png](6d.png) |
+| 7 | Mount SO101 follower arm | [7a.png](7a.png) · [7b.png](7b.png) · [7c.png](7c.png) |
+| 8 | Clone SOBle, pip install, flash ESP32-S3 firmware | — |
+| 9 | Prepare cables and LCD header pins | — |
+| 10 | Mounting the Electronics | — |
+| 11 | Wire arm UART, UBEC, and LCD power | — |
+| 12 | Power on, run `viz-apriltags.py` | — |
 | — | *Optional:* Raspi camera + AprilTag service | [CamMount.png](CamMount.png) |
 
 If a printed part name in your slicer folder differs from the labels above, match by shape to the step image.
