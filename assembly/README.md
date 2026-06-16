@@ -2,7 +2,7 @@
 
 Purchase the electronics in the [sourcing table](../README.md#sourcing-parts), then print the 3D parts from [STL/](../STL/) and follow the steps below.
 
-Each step has an illustration where noted (see the [quick reference](#quick-reference--all-steps) table).
+Each step has an illustration where noted (see the [quick reference](#quick-reference--all-steps) table). Diagrams use a fixed height (`280px`) so they render at a consistent size on GitHub.
 
 ---
 
@@ -40,15 +40,15 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 1. Insert all **six ball bearings** onto the **large pentagonal raceway**, then slide in the **small hex raceway**.
 
-   ![1a](1a.png)
+   <img src="1a.png" height="280" alt="Step 1a">
 
 2. Push the **hex raceway** against the balls while turning it so that the **protruding circle faces up**. Align the balls so they are spaced evenly at **60°**.
 
-   ![1b](1b.png)
+   <img src="1b.png" height="280" alt="Step 1b">
 
 3. Push the **ball crown** into the balls until it **snaps into place**.
 
-   ![1c](1c.png)
+   <img src="1c.png" height="280" alt="Step 1c">
 
 ---
 
@@ -74,11 +74,11 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 1. Connect the **rear wheel axle** to the **rear center hub** with the **main bolt**.
 
-   ![3a](3a.png)
+   <img src="3a.png" height="280" alt="Step 3a">
 
 2. Slide the **omni wheel** onto the rear axle and tighten the **rear axle cap**.
 
-   ![3b](3b.png)
+   <img src="3b.png" height="280" alt="Step 3b">
 
 3. Repeat **Steps 1–3** for the other side.
 
@@ -110,7 +110,7 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 ## Step 8 — Mounting the SO101 arm
 
-![Step 8](Step8.png)
+<img src="Step8.png" height="280" alt="Step 8">
 
 Build the follower arm per the official [LeRobot SO-101 assembly guide](https://huggingface.co/docs/lerobot/so101) (motor setup, joints, gripper).
 
@@ -155,7 +155,7 @@ If the board is already on the robot, **do not power the robot**. The driver boa
 
 ## Step 10b — Wiring the arm UART and power
 
-![Wiring](Wiring.png)
+<img src="Wiring.png" height="280" alt="Wiring">
 
 1. Attach the jumper headers (or hooks) to the LCB board's right side (diagram A), and then wire them to the driver board (diagram B).
 2. LCD connection options:
@@ -169,7 +169,7 @@ If the board is already on the robot, **do not power the robot**. The driver boa
 
 ## Step 11 — Powering up the robot
 
-![DCDC](DCDC.png)
+<img src="DCDC.png" height="280" alt="DCDC power wiring">
 
 > **WARNING:** When you start the example below, the **follower arm on the robot** will immediately engage to match the joint mapping in your config file. Keep hands clear of the arm and make sure it has room to move before running.
 
@@ -194,7 +194,7 @@ You can now control the robot using **WASD** and the leader arm.
 
 If you plan to add the **Raspi camera attachment**, print [`so101-pcb-camera-wrist-mount.stl`](../STL/Optional/so101-pcb-camera-wrist-mount.stl) and mount it on the gripper as shown:
 
-![Camera mount](CamMount.png)
+<img src="CamMount.png" height="280" alt="Camera mount">
 
 1. **Camera to Pi** — Connect the **Arducam IMX708** camera module to the **Raspberry Pi Zero 2 W** camera port.
 2. **Mount Pi + camera** — Secure the camera and Pi Zero 2 W to the cam mount.
