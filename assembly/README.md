@@ -2,7 +2,7 @@
 
 Purchase the electronics in the [sourcing table](../README.md#sourcing-parts), then print the 3D parts from [STL/](../STL/) and follow the steps below.
 
-Each step has an illustration where noted (see the [quick reference](#quick-reference--all-steps) table). Diagrams use a fixed height (`280px`) so they render at a consistent size on GitHub.
+Each step has an illustration where noted (see the [quick reference](#quick-reference--all-steps) table).
 
 ---
 
@@ -30,7 +30,7 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 | Part | Qty | Notes |
 | ---- | --- | ----- |
-| Ball bearing | 6 | |
+| Ball bearing | 6 | 3D printed |
 | Large pentagonal raceway | 1 | 3D printed |
 | Small hex raceway | 1 | 3D printed |
 | Ball crown | 1 | 3D printed |
@@ -64,7 +64,7 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 | Part | Qty | Notes |
 | ---- | --- | ----- |
 | Rear center hub | 1 | 3D printed |
-| Main bolt | 1 | |
+| Main bolt | 1 | 3D printed |
 | Rear wheel axle | 1 | 3D printed |
 | Rear axle cap | 1 | 3D printed |
 | Omni wheel | 1 | From Steps 1–2 |
@@ -86,19 +86,86 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 ## Step 4 — Traction wheel servo
 
-*Todo — parts table and assembly instructions.*
+
+| Part | Qty | Notes |
+| ---- | --- | ----- |
+| Feetech STS3215 servo (1/345) | 1 | |
+| STS drive plate | 1 | |
+| Phillips screw | 1 | |
+| M3 × 5 mm screw | 4 | |
+| Axle plate | 1 | 3D printed |
+| Front wheel connector | 1 | 3D printed |
+| Front center hub | 1 | 3D printed |
+| Main bolt | 1 | 3D printed |
+
+
+**Assembly**
+
+1. Attach the **STS drive plate** to the **Feetech STS3215 servo** with the **Phillips screw**, then use the **four M3 × 5 mm screws** to bolt on the **axle plate**.
+
+   <img src="4a.png" height="280" alt="Step 4a">
+
+2. Insert the **Feetech servo** assembly into the **front wheel connector**.
+
+   <img src="4b.png" height="280" alt="Step 4b">
+
+3. Run the **main bolt** through the **front center hub** and tighten it on the **front wheel connector**.
+
+   <img src="4c.png" height="280" alt="Step 4c">
 
 ---
 
 ## Step 5 — Traction wheel bearing
 
-*Todo — parts table and assembly instructions.*
+
+| Part | Qty | Notes |
+| ---- | --- | ----- |
+| Ball bearing | 6 | 3D printed |
+| Small hex raceway | 1 | 3D printed |
+| Front bearing raceway | 1 | 3D printed |
+| Ball crown | 1 | 3D printed |
+
+
+**Assembly**
+
+1. Insert all **six ball bearings** into the **front bearing raceway**, then slide in the **small hex raceway**.
+
+   <img src="5a.png" height="280" alt="Step 5a">
+
+2. Push the **hex raceway** against the balls while turning it. Align the balls so they are spaced evenly at **60°**.
+
+   <img src="5b.png" height="280" alt="Step 5b">
+
+3. Push the **ball crown** into the balls until it **snaps into place**.
+
+   <img src="5c.png" height="280" alt="Step 5c">
 
 ---
 
 ## Step 6 — Front wheel assembly
 
-*Todo — parts table and assembly instructions.*
+
+| Part | Qty | Notes |
+| ---- | --- | ----- |
+| Traction servo assembly | 1 | From Step 4 |
+| Traction wheel bearing | 1 | From Step 5 |
+| Front axle | 1 | 3D printed |
+| Front grip wheel | 1 | 3D printed |
+| Axle clip | 1 | 3D printed |
+| Penta bolt | 1 | 3D printed |
+
+
+**Assembly**
+
+1. Insert the **front axle** into the **front grip wheel**, then into the **traction wheel bearing**. Secure by pushing the **axle clip** onto the axle.
+
+   <img src="6a.png" height="280" alt="Step 6a">
+
+2. Align the axle end to face the **servo axle plate**. Push together and secure by locking the **penta bolt** into the front chassis side thread.
+
+   <img src="6b.png" height="280" alt="Step 6b">
+
+3. Repeat **Steps 4–6** for the other side.
 
 ---
 
@@ -220,9 +287,9 @@ More Pi details: [raspi/README.md](../raspi/README.md).
 | 1 | Omni-directional ball bearing | [1a.png](1a.png) · [1b.png](1b.png) · [1c.png](1c.png) |
 | 2 | Omni-directional rollers | — |
 | 3 | Rear omni-wheel assembly | [3a.png](3a.png) · [3b.png](3b.png) |
-| 4 | Traction wheel servo | — |
-| 5 | Traction wheel bearing | — |
-| 6 | Front wheel assembly | — |
+| 4 | Traction wheel servo | [4a.png](4a.png) · [4b.png](4b.png) · [4c.png](4c.png) |
+| 5 | Traction wheel bearing | [5a.png](5a.png) · [5b.png](5b.png) · [5c.png](5c.png) |
+| 6 | Front wheel assembly | [6a.png](6a.png) · [6b.png](6b.png) |
 | 7 | Chassis assembly | — |
 | 8 | Mount SO101 follower arm | [Step8.png](Step8.png) |
 | 9 | Clone SOBle, pip install, flash ESP32-S3 firmware | — |
