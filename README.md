@@ -101,19 +101,19 @@ leader.load_config("config.json")  # or pass config_path= in the constructor
 ```
 
 
-| Method                                                                                           | Returns                                       | Notes                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Method                                                                                           | Returns                                       | Notes                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SO101Leader.limits_from_config(cfg: dict)`                                                      | `tuple[list[JointLimits], list[JointLimits]]` | **SOBle:** `"leader"` / `"follower"` with **J1…J6** `[min, max]`. **Standard SO101:** `"so101_leader"` / `"so101_follower"` with `"joints"` → `min_limit` / `max_limit`. |
-| `SO101Leader(port, leader_limits=None, follower_limits=None, *, config_path=None, baud=1000000)` | —                                             | `**port` required**. Pass limits, `config_path`, or call `load_config()` before use.                                                                                     |
-| `load_config(path)`                                                                              | `None`                                        | Load limits from JSON in either format above; (re)starts serial reader.                                                                                                  |
-| `start()` / `stop()`                                                                             | `None`                                        | `start()` optional after `stop()`; `stop()` ends SYNC_READ loop.                                                                                                         |
-| `getArmPositions()`                                                                              | `list[int]`                                   | **6** follower-mapped joint raws **0 … 4095**, or `**[]`** if not ready.                                                                                                 |
-| `setArmPositions(joints)`                                                                        | `None`                                        | Engage leader torque, or pass `**[]`** to release (backdrivable; default).                                                                                               |
+| `SO101Leader(port, leader_limits=None, follower_limits=None, *, config_path=None, baud=1000000)` | —                                             | **`port` required**. Pass limits, `config_path`, or call `load_config()` before use.                                                                                       |
+| `load_config(path)`                                                                              | `None`                                        | Load limits from JSON in either format above; (re)starts serial reader.                                                                                                    |
+| `start()` / `stop()`                                                                             | `None`                                        | `start()` optional after `stop()`; `stop()` ends SYNC_READ loop.                                                                                                           |
+| `getArmPositions()`                                                                              | `list[int]`                                   | **6** follower-mapped joint raws **0 … 4095**, or **`[]`** if not ready.                                                                                                  |
+| `setArmPositions(joints)`                                                                        | `None`                                        | Engage leader torque, or pass **`[]`** to release (backdrivable; default).                                                                                                 |
 
 `load_config` accepts either:
 
 - **Standard SO101** — `"so101_leader"` / `"so101_follower"`, each with a `"joints"` object (`min_limit` / `max_limit` per joint, keyed by name and sorted by motor `id`)
-- **minified** — `"leader"` / `"follower"` with **J1…J6** as `[min, max]` pairs (see `examples/min_config.json`)
+- **minified** — `"leader"` / `"follower"` with **J1…J6** as `[min, max]` pairs (see [`examples/min_config.json`](examples/min_config.json))
 
 ## Code reference — Class `SO101Platform`
 
@@ -137,14 +137,14 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 ### Core Commands
 
 
-| Method                            | Returns                             | Notes                                                                                        |
-| --------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------- |
-| `getArmPositions()`               | `list[int]`                         | **6** raw encoder values **J1 … J6** from follower arm; `**[]`** if no state yet.            |
-| `getEncoders()`                   | `tuple[int, int]`                   | `(left, right)`, each **0 … 4095**.                                                          |
-| `getIMUQuaternion()`              | `tuple[float, float, float, float]` | Unit quaternion **(w, x, y, z)**.                                                            |
-| `getIMURPH()`                     | `tuple[float, float, float]`        | Roll, pitch, heading in **degrees**                                                              |
-| `setLeftRightMotors(left, right)` | —                                   | Each **−125 … 125** (clamped).                                                               |
-| `setArmPositions(joints)`         | —                                   | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. Pass `**[]`** to disengage arm. |
+| Method                            | Returns                             | Notes                                                                                         |
+| --------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| `getArmPositions()`               | `list[int]`                         | **6** raw encoder values **J1 … J6** from follower arm; **`[]`** if no state yet.             |
+| `getEncoders()`                   | `tuple[int, int]`                   | `(left, right)`, each **0 … 4095**.                                                           |
+| `getIMUQuaternion()`              | `tuple[float, float, float, float]` | Unit quaternion **(w, x, y, z)**.                                                             |
+| `getIMURPH()`                     | `tuple[float, float, float]`        | Roll, pitch, heading in **degrees**.                                                          |
+| `setLeftRightMotors(left, right)` | —                                   | Each **−125 … 125** (clamped).                                                                |
+| `setArmPositions(joints)`         | —                                   | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. Pass **`[]`** to disengage arm. |
 
 
 ### Camera Commands
@@ -153,11 +153,11 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 | Method                                                             | Returns                                       | Notes                                                                                                           |
 | ------------------------------------------------------------------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `getRaspiAlive()`                                                  | `bool`                                        | Pi serial seen recently.                                                                                        |
-| `getApriltagTags()`                                                | `list[tuple[int, list[tuple[float, float]]]]` | Tag id plus four corner `(x, y)` pairs (**lb, rb, rt, lt**). Returns `[]` if no state yet or no tags in view.   |
-| `setTagDetectionMode(family)`                                      | —                                             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'`.                                                                      |
+| `getApriltagTags()`                                                | `list[tuple[int, list[tuple[float, float]]]]` | Tag id plus four corner `(x, y)` pairs (**lb, rb, rt, lt**). Returns **`[]`** if no state yet or no tags in view. |
 | `getWifiConnected()`                                               | `bool`                                        | Pi WiFi up (`True` if online).                                                                                  |
+| `setTagDetectionMode(family)`                                      | —                                             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'`.                                                                      |
 | `enableCameraStreamMode(onFrameCallback, *, host=None, port=5000)` | `str` (host IP)                               | Pi streams camera over WiFi to this PC → BGR via `onFrameCallback`.                                             |
-| `connectToWifi(ssid, password)`                                    | —                                             | *Experimental — do not use for now.* Connects Pi to a WiFi network. Poll `getWifiConnected()` before streaming. |
+| `connectToWifi(ssid, password)`                                    | —                                             | *Experimental — do not use for now.* Connects Pi to WiFi. Poll `getWifiConnected()` before streaming.           |
 
 
 **Pi camera stream** — configure WiFi on the Pi first (`connectToWifi` is experimental). Each decoded frame is **1280×720** BGR on a background thread:
