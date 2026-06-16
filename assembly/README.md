@@ -27,19 +27,60 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 ## Step 1 — Omni-directional ball bearing
 
-*Todo — parts table and assembly instructions.*
+
+| Part | Qty | Notes |
+| ---- | --- | ----- |
+| Ball bearing | 6 | |
+| Large pentagonal raceway | 1 | 3D printed |
+| Small hex raceway | 1 | 3D printed |
+| Ball crown | 1 | 3D printed |
+
+
+**Assembly**
+
+1. Insert all **six ball bearings** onto the **large pentagonal raceway**, then slide in the **small hex raceway**.
+
+   ![1a](1a.png)
+
+2. Push the **hex raceway** against the balls while turning it so that the **protruding circle faces up**. Align the balls so they are spaced evenly at **60°**.
+
+   ![1b](1b.png)
+
+3. Push the **ball crown** into the balls until it **snaps into place**.
+
+   ![1c](1c.png)
 
 ---
 
 ## Step 2 — Omni-directional rollers
 
-*Todo — parts table and assembly instructions.*
+> **IN MAINTENANCE:** This section is currently being reconstructed in order to fix a mechanical issue that was encountered during testing. Please come back later.
 
 ---
 
 ## Step 3 — Rear omni-wheel assembly
 
-*Todo — parts table and assembly instructions.*
+
+| Part | Qty | Notes |
+| ---- | --- | ----- |
+| Rear center hub | 1 | 3D printed |
+| Main bolt | 1 | |
+| Rear wheel axle | 1 | 3D printed |
+| Rear axle cap | 1 | 3D printed |
+| Omni wheel | 1 | From Steps 1–2 |
+
+
+**Assembly**
+
+1. Connect the **rear wheel axle** to the **rear center hub** with the **main bolt**.
+
+   ![3a](3a.png)
+
+2. Slide the **omni wheel** onto the rear axle and tighten the **rear axle cap**.
+
+   ![3b](3b.png)
+
+3. Repeat **Steps 1–3** for the other side.
 
 ---
 
@@ -176,9 +217,9 @@ More Pi details: [raspi/README.md](../raspi/README.md).
 
 | Step | Summary | Image |
 | ---- | ------- | ----- |
-| 1 | Omni-directional ball bearing | — |
+| 1 | Omni-directional ball bearing | [1a.png](1a.png) · [1b.png](1b.png) · [1c.png](1c.png) |
 | 2 | Omni-directional rollers | — |
-| 3 | Rear omni-wheel assembly | — |
+| 3 | Rear omni-wheel assembly | [3a.png](3a.png) · [3b.png](3b.png) |
 | 4 | Traction wheel servo | — |
 | 5 | Traction wheel bearing | — |
 | 6 | Front wheel assembly | — |
