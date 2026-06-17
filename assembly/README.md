@@ -188,6 +188,8 @@ Build the follower arm per the official [LeRobot SO-101 assembly guide](https://
 
 ## Step 8 — Download SOBle and flash firmware
 
+<img src="esp32s3lcd.png" height="280" alt="ESP32-S3 LCD board">
+
 If the board is already on the robot, **do not power the robot**. The driver board may be damaged if the robot is powered without a shared ground.
 
 1. **Get the repo** (needed for the Arduino sketch and examples):
@@ -213,10 +215,18 @@ If the board is already on the robot, **do not power the robot**. The driver boa
 ## Step 9 — Preparing the cables and LCD pins
 
 1. Insert the barrel connector and UBEC power wires into the XT60 female screw terminal, as shown in the diagram.
+
+   <img src="9a.png" height="280" alt="Step 9a">
+
 2. *Optional.* If you are planning to use the Raspi camera or you have *hooked jumpers*, you will have to do this. Be warned that this step is **irreversible**:
    1. Remove the header from the end of the UBEC.
    2. Insert the power wires into the USB-C female screw terminal, as shown in the diagram.
+
+   <img src="9b.png" height="280" alt="Step 9b">
+
 3. Solder the header pins onto the LCD board's right side. *(You may skip this step if you are using hooked jumpers.)*
+
+   <img src="9c.png" height="280" alt="Step 9c">
 
 ---
 
@@ -293,8 +303,8 @@ More Pi details: [raspi/README.md](../raspi/README.md).
 | 5 | Traction wheel bearing | [5a.png](5a.png) · [5b.png](5b.png) · [5c.png](5c.png) |
 | 6 | Front wheel assembly | [6a.png](6a.png) · [6b.png](6b.png) · [6d.png](6d.png) |
 | 7 | Mount SO101 follower arm | [7a.png](7a.png) · [7b.png](7b.png) · [7c.png](7c.png) |
-| 8 | Clone SOBle, pip install, flash ESP32-S3 firmware | — |
-| 9 | Prepare cables and LCD header pins | — |
+| 8 | Clone SOBle, pip install, flash ESP32-S3 firmware | [esp32s3lcd.png](esp32s3lcd.png) |
+| 9 | Prepare cables and LCD header pins | [9a.png](9a.png) · [9b.png](9b.png) · [9c.png](9c.png) |
 | 10 | Mounting the Electronics | — |
 | 11 | Wire arm UART, UBEC, and LCD power | — |
 | 12 | Power on, run `viz-apriltags.py` | — |
