@@ -11,23 +11,23 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 | Part | Qty | Notes |
 | ---- | --- | ----- |
-| Ball bearing | 6 | 3D printed |
-| Large pentagonal raceway | 1 | 3D printed |
-| Small hex raceway | 1 | 3D printed |
-| Ball crown | 1 | 3D printed |
+| Ball bearing | 6 | [Supported Ball Bearing.stl](../STL/KiloChassis/Bearing/Supported%20Ball%20Bearing.stl) |
+| Omniwheel core | 1 | [Omni Wheel Core.stl](../STL/KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Core.stl) |
+| Bearing inner ring | 1 | [Bearing Inner Ring.stl](../STL/KiloChassis/Bearing/Bearing%20Inner%20Ring.stl) |
+| Ball retainer | 1 | [Ball Retainer.stl](../STL/KiloChassis/Bearing/Ball%20Retainer.stl) |
 
 
 **Assembly**
 
-1. Insert all **six ball bearings** onto the **large pentagonal raceway**, then slide in the **small hex raceway**.
+1. Insert all **six ball bearings** onto the **omniwheel core**, then slide in the **bearing inner ring**.
 
    <img src="1a.png" height="280" alt="Step 1a">
 
-2. Push the **hex raceway** against the balls while turning it so that the **protruding circle faces up**. Align the balls so they are spaced evenly at **60°**.
+2. Push the **bearing inner ring** against the balls while turning it so that the **protruding circle faces up**. Align the balls so they are spaced evenly at **60°**.
 
    <img src="1b.png" height="280" alt="Step 1b">
 
-3. Push the **ball crown** into the balls until it **snaps into place**.
+3. Push the **ball retainer** into the balls until it **snaps into place**.
 
    <img src="1c.png" height="280" alt="Step 1c">
 
@@ -44,20 +44,20 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 | Part | Qty | Notes |
 | ---- | --- | ----- |
-| Rear center hub | 1 | 3D printed |
-| Main bolt | 1 | 3D printed |
-| Rear wheel axle | 1 | 3D printed |
-| Rear axle cap | 1 | 3D printed |
+| Rear base | 1 | [Rear Base.stl](../STL/KiloChassis/Base%20Components/Rear%20Base.stl) |
+| Main base bolt | 1 | [Main Base Bolt.stl](../STL/KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
+| Rear deadwheel bracket | 1 | [Rear Deadwheel Bracket.stl](../STL/KiloChassis/Rear%20Deadwheel/Rear%20Deadwheel%20Bracket.stl) |
+| Rear wheel nut | 1 | [Rear Wheel Nut.stl](../STL/KiloChassis/Rear%20Deadwheel/Rear%20Wheel%20Nut.stl) |
 | Omni wheel | 1 | From Steps 1–2 |
 
 
 **Assembly**
 
-1. Connect the **rear wheel axle** to the **rear center hub** with the **main bolt**.
+1. Connect the **rear deadwheel bracket** to the **rear base** with the **main base bolt**.
 
    <img src="3a.png" height="280" alt="Step 3a">
 
-2. Slide the **omni wheel** onto the rear axle and tighten the **rear axle cap**.
+2. Slide the **omni wheel** onto the rear axle and tighten the **rear wheel nut**.
 
    <img src="3b.png" height="280" alt="Step 3b">
 
@@ -74,23 +74,23 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 | STS drive plate | 1 | |
 | Phillips screw | 1 | |
 | M3 × 5 mm screw | 4 | |
-| Axle plate | 1 | 3D printed |
-| Front wheel connector | 1 | 3D printed |
-| Front center hub | 1 | 3D printed |
-| Main bolt | 1 | 3D printed |
+| Servo coupler | 1 | [Servo Coupler.stl](../STL/KiloChassis/Front%20Drive/Front%20Axle/Servo%20Coupler.stl) |
+| Servo bracket | 1 | [Left](../STL/KiloChassis/Front%20Drive/Servo%20Bracket%20Left.stl) · [Right](../STL/KiloChassis/Front%20Drive/Servo%20Bracket%20Right.stl) |
+| Arm base | 1 | [Arm Base.stl](../STL/KiloChassis/Base%20Components/Arm%20Base.stl) |
+| Main base bolt | 1 | [Main Base Bolt.stl](../STL/KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
 
 
 **Assembly**
 
-1. Attach the **STS drive plate** to the **Feetech STS3215 servo** with the **Phillips screw**, then use the **four M3 × 5 mm screws** to bolt on the **axle plate**.
+1. Attach the **STS drive plate** to the **Feetech STS3215 servo** with the **Phillips screw**, then use the **four M3 × 5 mm screws** to bolt on the **servo coupler**.
 
    <img src="4a.png" height="280" alt="Step 4a">
 
-2. Insert the **Feetech servo** assembly into the **front wheel connector**.
+2. Insert the **Feetech servo** assembly into the **servo bracket**.
 
    <img src="4b.png" height="280" alt="Step 4b">
 
-3. Run the **main bolt** through the **front center hub** and tighten it on the **front wheel connector**.
+3. Run the **main base bolt** through the **arm base** and tighten it on the **servo bracket**.
 
    <img src="4c.png" height="280" alt="Step 4c">
 
@@ -101,23 +101,23 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 | Part | Qty | Notes |
 | ---- | --- | ----- |
-| Ball bearing | 6 | 3D printed |
-| Small hex raceway | 1 | 3D printed |
-| Front bearing raceway | 1 | 3D printed |
-| Ball crown | 1 | 3D printed |
+| Ball bearing | 6 | [Supported Ball Bearing.stl](../STL/KiloChassis/Bearing/Supported%20Ball%20Bearing.stl) |
+| Bearing inner ring | 1 | [Bearing Inner Ring.stl](../STL/KiloChassis/Bearing/Bearing%20Inner%20Ring.stl) |
+| Wheel bearing bracket | 1 | [Left](../STL/KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Left.stl) · [Right](../STL/KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Right.stl) |
+| Ball retainer | 1 | [Ball Retainer.stl](../STL/KiloChassis/Bearing/Ball%20Retainer.stl) |
 
 
 **Assembly**
 
-1. Insert all **six ball bearings** into the **front bearing raceway**, then slide in the **small hex raceway**.
+1. Insert all **six ball bearings** into the **wheel bearing bracket**, then slide in the **bearing inner ring**.
 
    <img src="5a.png" height="280" alt="Step 5a">
 
-2. Push the **hex raceway** against the balls while turning it. Align the balls so they are spaced evenly at **60°**.
+2. Push the **bearing inner ring** against the balls while turning it. Align the balls so they are spaced evenly at **60°**.
 
    <img src="5b.png" height="280" alt="Step 5b">
 
-3. Push the **ball crown** into the balls until it **snaps into place**.
+3. Push the **ball retainer** into the balls until it **snaps into place**.
 
    <img src="5c.png" height="280" alt="Step 5c">
 
@@ -130,26 +130,26 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 | ---- | --- | ----- |
 | Traction servo assembly | 1 | From Step 4 |
 | Traction wheel bearing | 1 | From Step 5 |
-| Front axle | 1 | 3D printed |
+| Front axle | 1 | [Front Axle Halve.stl](../STL/KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Halve.stl) |
 | Front grip wheel | 1 | 3D printed |
-| Axle clip | 1 | 3D printed |
-| Penta bolt | 1 | 3D printed |
-| Main bolt | 2 | 3D printed |
+| Front axle clip | 1 | [Front Axle Clip.stl](../STL/KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Clip.stl) |
+| Front drive bolt | 1 | [Front Drive Bolt.stl](../STL/KiloChassis/Bolts/Front%20Drive%20Bolt.stl) |
+| Main base bolt | 2 | [Main Base Bolt.stl](../STL/KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
 
 
 **Assembly**
 
-1. Insert the **front axle** into the **front grip wheel**, then into the **traction wheel bearing**. Secure by pushing the **axle clip** onto the axle.
+1. Insert the **front axle** into the **front grip wheel**, then into the **traction wheel bearing**. Secure by pushing the **front axle clip** onto the axle.
 
    <img src="6a.png" height="280" alt="Step 6a">
 
-2. Align the axle end to face the **servo axle plate**. Push together and secure by locking the **penta bolt** into the front chassis side thread.
+2. Align the axle end to face the **servo axle plate**. Push together and secure by locking the **front drive bolt** into the arm base side thread.
 
    <img src="6b.png" height="280" alt="Step 6b">
 
 3. Repeat **Steps 4–6** for the other side.
 
-4. Use **two main bolts** to attach the **back chassis** to the **front chassis**.
+4. Use **two main base bolts** to attach the **rear base** to the **arm base**.
 
    <img src="6d.png" height="280" alt="Step 6d">
 
@@ -162,23 +162,23 @@ Build the follower arm per the official [LeRobot SO-101 assembly guide](https://
 
 | Part | Qty | Notes |
 | ---- | --- | ----- |
-| Lock pin | 4 | 3D printed |
-| Pin half nut | 1 | 3D printed |
-| Pin lock plate | 1 | 3D printed |
-| Pin lock bolt | 1 | 3D printed |
+| Arm retainer pin | 4 | [Arm Retainer Pin Halve.stl](../STL/KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Retainer%20Pin%20Halve.stl) |
+| Arm pin half bracket | 1 | [Arm Pin Half Bracket.stl](../STL/KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Pin%20Half%20Bracket.stl) |
+| Arm pin mini bracket | 1 | [Arm Pin Mini Bracket.stl](../STL/KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Pin%20Mini%20Bracket.stl) |
+| Arm pin bolt | 1 | [Arm Pin Bolt.stl](../STL/KiloChassis/Bolts/Arm%20Pin%20Bolt.stl) |
 
 
 **Assembly**
 
-1. Mount the **base of the SO101 follower arm** to the chassis. Insert all **four lock pins** all the way into the holes.
+1. Mount the **base of the SO101 follower arm** to the chassis. Insert all **four arm retainer pins** all the way into the holes.
 
    <img src="7a.png" height="280" alt="Step 7a">
 
-2. Insert the **pin half nut** on one of the pins on the bottom of the chassis and rotate it until it reaches the back.
+2. Insert the **arm pin half bracket** on one of the pins on the bottom of the chassis and rotate it until it reaches the back.
 
    <img src="7b.png" height="280" alt="Step 7b">
 
-3. Push the **pin lock plate** into place and fasten using the **pin lock bolt**.
+3. Push the **arm pin mini bracket** into place and fasten using the **arm pin bolt**.
 
    <img src="7c.png" height="280" alt="Step 7c">
 
