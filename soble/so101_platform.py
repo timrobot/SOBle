@@ -7,7 +7,6 @@ import ipaddress
 import math
 import multiprocessing as mp
 import platform
-import queue
 import socket
 import struct
 import threading
@@ -18,9 +17,14 @@ from typing import Optional
 import cv2
 import numpy as np
 from bleak import BleakClient, BleakScanner
+from bleak.backends.device import BLEDevice
 
 from soble import camera_stream as host_camera_stream
 from soble.arm_joints import parse_arm_joints
+
+# Linux default fork + asyncio/BlueZ D-Bus breaks BLE notify delivery in a child;
+# spawn gives the BLE worker a clean process on Linux (fork breaks BlueZ notify delivery).
+MP_CTX = mp.get_context("spawn")
 
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331d914"
 CHAR_UUID = "beb5483e-36e1-4688-b7f2-e6a6a6d74324"
@@ -32,13 +36,83 @@ CMD_TAG16H5 = ord("1")
 CMD_TAG25H9 = ord("2")
 CMD_TAG36H11 = ord("3")
 CMD_STREAM = ord("A")
-CMD_WIFIUSER = ord("U")
-CMD_WIFIPASS = ord("P")
-WIFI_CRED_MAX = 128  # matches ESP32 So101-Platform.ino
 ARM_MOTOR_COUNT = 6  # 6 x 12-bit positions in armPos[9]
 ARM_ENABLE_MASK = 0x3F  # bit0=J1 .. bit5=J6 — all arm joints engaged
 ARM_CENTER_RAW = 2048  # mid of 0..4095 — default when leader not connected
 STATE_LEN = 201
+
+
+async def _acquire_mtu_for_robot_char(client: BleakClient, char_uuid: str) -> None:
+    """Negotiate ATT MTU on the robot notify characteristic (BlueZ AcquireNotify)."""
+    backend = client._backend
+    _ = client.services
+    char = client.services.get_characteristic(char_uuid)
+    if char is None:
+        raise RuntimeError(f"GATT characteristic not found: {char_uuid}")
+
+    bus = getattr(backend, "_bus", None)
+    char_path = getattr(char, "path", None)
+    if bus is not None and char_path is not None and "notify" in char.properties:
+        try:
+            import os
+
+            from bleak.backends.bluezdbus.utils import assert_reply
+            from dbus_fast import Message
+
+            from bleak.backends.bluezdbus import defs
+
+            reply = await bus.call(
+                Message(
+                    destination=defs.BLUEZ_SERVICE,
+                    path=char_path,
+                    interface=defs.GATT_CHARACTERISTIC_INTERFACE,
+                    member="AcquireNotify",
+                    signature="a{sv}",
+                    body=[{}],
+                )
+            )
+            assert_reply(reply)
+            mtu = int(reply.body[1])
+            os.close(reply.unix_fds[0])
+            if hasattr(backend, "_mtu_size"):
+                backend._mtu_size = mtu
+            return
+        except Exception as exc:
+            print(
+                f"AcquireNotify on robot characteristic failed: "
+                f"{type(exc).__name__}: {exc!r}",
+                flush=True,
+            )
+
+    acquire = getattr(backend, "_acquire_mtu", None)
+    if acquire is not None:
+        await acquire()
+    elif hasattr(client, "exchange_mtu"):
+        await client.exchange_mtu(512)
+
+
+async def _prepare_ble_link(
+    client: BleakClient,
+    char_uuid: str = CHAR_UUID,
+    *,
+    need_notify_len: int = STATE_LEN,
+) -> None:
+    """Negotiate ATT MTU for robot notifies; warn only if payload looks too small."""
+    await _acquire_mtu_for_robot_char(client, char_uuid)
+
+    char = client.services.get_characteristic(char_uuid)
+    if char is None:
+        raise RuntimeError(f"GATT characteristic not found: {char_uuid}")
+
+    link_mtu = int(client.mtu_size)
+    prop_payload = int(char.max_write_without_response_size)
+    effective_payload = max(prop_payload, link_mtu - 3)
+    if effective_payload < need_notify_len:
+        print(
+            f"Warning: BLE payload limit {effective_payload} < robot notify "
+            f"{need_notify_len}; state may be truncated",
+            flush=True,
+        )
 TAG_INFO_LEN = 18
 MAX_TAGS = 10
 TAG_BLOB_LEN = MAX_TAGS * TAG_INFO_LEN
@@ -116,7 +190,7 @@ def get_lan_ip() -> str:
             return ranked[0][1]
 
     raise RuntimeError(
-        "Could not determine LAN IPv4; pass host= to enableCameraStreamMode()"
+        "Could not determine LAN IPv4; pass host= to videoCapture()"
     )
 
 
@@ -181,22 +255,6 @@ def _pack_raspi_ble_command(cmd: int, ip: str = "0.0.0.0", port: int = 0) -> byt
     ip_le = int(ipaddress.IPv4Address(ip)).to_bytes(4, "little")
     body = ip_le + struct.pack("<H", int(port) & 0xFFFF) + b"\x00" * 5
     return struct.pack("<B", cmd & 0xFF) + body
-
-
-def _pack_wifi_user(ssid: str) -> bytes:
-    """BLE → ESP32: 'U' + SSID bytes (no NUL). Max 127 UTF-8 bytes."""
-    raw = ssid.encode("utf-8")
-    if not raw or len(raw) > WIFI_CRED_MAX - 1:
-        raise ValueError(f"SSID must be 1..{WIFI_CRED_MAX - 1} UTF-8 bytes")
-    return bytes([CMD_WIFIUSER]) + raw
-
-
-def _pack_wifi_pass(password: str) -> bytes:
-    """BLE → ESP32: 'P' + password bytes (no NUL). Max 127 UTF-8 bytes."""
-    raw = password.encode("utf-8")
-    if not raw or len(raw) > WIFI_CRED_MAX - 1:
-        raise ValueError(f"password must be 1..{WIFI_CRED_MAX - 1} UTF-8 bytes")
-    return bytes([CMD_WIFIPASS]) + raw
 
 
 def _unpack_robot_state(data: bytes) -> dict | None:
@@ -360,18 +418,18 @@ def _estimate_tag_pose(corners: tuple[int, ...], tag_size: float, camera_params:
     return success, R, tvec
 
 
-async def _find_device_address(device_name: str) -> Optional[str]:
+async def _find_device(device_name: str) -> BLEDevice | None:
     dev = await BleakScanner.find_device_by_filter(
         lambda d, _: bool(d.name and device_name.lower() in d.name.lower())
     )
     if dev is None:
         return None
     print(f"Found {dev.name} ({dev.address})", flush=True)
-    return dev.address
+    return dev
 
 
 async def _ble_session(
-    dev_path: str,
+    device: BLEDevice,
     log_state: bool,
     stop: mp.Event,
     left_cmd: mp.Value,
@@ -389,7 +447,6 @@ async def _ble_session(
     tag_blob: mp.Array,
     raspi: mp.Value,
     wifi: mp.Value,
-    ble_write_queue: mp.Queue,
     lock: mp.Lock,
 ) -> bool:
     def on_notify(_handle: int, data: bytearray) -> None:
@@ -417,17 +474,11 @@ async def _ble_session(
 
     disconnect_event = asyncio.Event()
     disconnect_event.clear()
-    print(f"Connecting to {dev_path}...", flush=True)
+    print(f"Connecting to {device.address}...", flush=True)
     async with BleakClient(
-        dev_path, disconnected_callback=on_disconnect, timeout=20.0
+        device, disconnected_callback=on_disconnect, timeout=20.0
     ) as client:
-        try:
-            await client.exchange_mtu(512)
-        except Exception as mtu_exc:
-            print(
-                f"MTU exchange skipped: {type(mtu_exc).__name__}: {mtu_exc!r}",
-                flush=True,
-            )
+        await _prepare_ble_link(client)
         print("Subscribing to notify...", flush=True)
         await client.start_notify(CHAR_UUID, on_notify)
         print("Connected.", flush=True)
@@ -446,16 +497,7 @@ async def _ble_session(
                     print("No notify — reconnecting...", flush=True)
                     break
 
-                try:
-                    queued = ble_write_queue.get_nowait()
-                except queue.Empty:
-                    queued = None
-                if queued is not None:
-                    await client.write_gatt_char(CHAR_UUID, queued, response=True)
-                    last_sent = time.monotonic()
-                    continue
-
-                if now - last_sent >= TX_INTERVAL:
+                if pending_ble_valid.value or now - last_sent >= TX_INTERVAL:
                     with lock:
                         if pending_ble_valid.value:
                             n = (
@@ -509,13 +551,12 @@ async def _ble_main(
     tag_blob: mp.Array,
     raspi: mp.Value,
     wifi: mp.Value,
-    ble_write_queue: mp.Queue,
     lock: mp.Lock,
 ) -> None:
     while not stop.is_set():
         print(f"Scanning for {device_name!r}...", flush=True)
-        dev_path = await _find_device_address(device_name)
-        if dev_path is None:
+        device = await _find_device(device_name)
+        if device is None:
             print(
                 f"No device with name containing {device_name!r}; "
                 f"retry in {reconnect_delay_s:.0f}s",
@@ -526,7 +567,7 @@ async def _ble_main(
 
         try:
             disconnected = await _ble_session(
-                dev_path,
+                device,
                 log_state,
                 stop,
                 left_cmd,
@@ -544,7 +585,6 @@ async def _ble_main(
                 tag_blob,
                 raspi,
                 wifi,
-                ble_write_queue,
                 lock,
             )
         except Exception as exc:
@@ -584,7 +624,6 @@ def _ble_worker(
     tag_blob: mp.Array,
     raspi: mp.Value,
     wifi: mp.Value,
-    ble_write_queue: mp.Queue,
     lock: mp.Lock,
 ) -> None:
     asyncio.run(
@@ -608,7 +647,6 @@ def _ble_worker(
             tag_blob,
             raspi,
             wifi,
-            ble_write_queue,
             lock,
         )
     )
@@ -627,44 +665,54 @@ class SO101Platform:
         self._device_name = device_name
         self._reconnect_delay_s = reconnect_delay_s
         self._log_state = log_state
+        self._closed = False
         self._tag_origin_x = TAG_ORIGIN_X
         self._tag_origin_y = TAG_ORIGIN_Y
         self._tag_corner_scale = TAG_CORNER_SCALE
 
-        self._lock = mp.Lock()
-        self._stop = mp.Event()
-        self._left_cmd = mp.Value("i", 0)
-        self._right_cmd = mp.Value("i", 0)
-        self._arm_packed = mp.Array(
+        self._lock = MP_CTX.Lock()
+        self._stop = MP_CTX.Event()
+        self._left_cmd = MP_CTX.Value("i", 0)
+        self._right_cmd = MP_CTX.Value("i", 0)
+        self._arm_packed = MP_CTX.Array(
             "B", _pack_arm12([ARM_CENTER_RAW] * ARM_MOTOR_COUNT)
         )
-        self._pending_ble = mp.Array("B", CMD_ACTUATOR_LEN)
-        self._pending_ble_valid = mp.Value("b", False)
-        self._arm_positions_valid = mp.Value("b", False)
-        self._got_state = mp.Value("b", False)
-        self._last_notify = mp.Value("d", 0.0)
-        self._enc = mp.Array("i", 2)
-        self._arm_raw = mp.Array("i", ARM_MOTOR_COUNT)
-        self._quat = mp.Array("d", 4)
+        self._pending_ble = MP_CTX.Array("B", CMD_ACTUATOR_LEN)
+        self._pending_ble_valid = MP_CTX.Value("b", False)
+        self._arm_positions_valid = MP_CTX.Value("b", False)
+        self._got_state = MP_CTX.Value("b", False)
+        self._last_notify = MP_CTX.Value("d", 0.0)
+        self._enc = MP_CTX.Array("i", 2)
+        self._arm_raw = MP_CTX.Array("i", ARM_MOTOR_COUNT)
+        self._quat = MP_CTX.Array("d", 4)
         self._quat[0] = 1.0
-        self._ntags = mp.Value("i", 0)
-        self._tag_blob = mp.Array("B", TAG_BLOB_LEN)
-        self._raspi = mp.Value("b", False)
-        self._wifi = mp.Value("b", False)
-        self._ble_write_queue: mp.Queue[bytes] = mp.Queue()
+        self._ntags = MP_CTX.Value("i", 0)
+        self._tag_blob = MP_CTX.Array("B", TAG_BLOB_LEN)
+        self._raspi = MP_CTX.Value("b", False)
+        self._wifi = MP_CTX.Value("b", False)
         self._proc: mp.Process | None = None
 
         self._stream_proc: mp.Process | None = None
-        self._stream_stop = mp.Event()
-        self._frame_buf = mp.Array(
-            "B", host_camera_stream.STREAM_FRAME_BYTES
-        )
-        self._frame_ready = mp.Event()
-        self._frame_seq = mp.Value("Q", 0)
-        self._frame_lock = mp.Lock()
+        self._stream_stop = MP_CTX.Event()
+        self._frame_buf = MP_CTX.Array("B", host_camera_stream.SHARED_FRAME_BYTES)
+        self._frame_write_slot = MP_CTX.Value("i", 0)
+        self._frame_read_slot = MP_CTX.Value("i", 0)
+        self._frame_ready = MP_CTX.Event()
+        self._frame_seq = MP_CTX.Value("Q", 0)
+        self._frame_lock = MP_CTX.Lock()
         self._stream_dispatch_stop = threading.Event()
         self._stream_dispatch_thread: threading.Thread | None = None
         self._on_frame_callback: Callable[[np.ndarray], None] | None = None
+        self._latest_frame_lock = threading.Lock()
+        self._latest_frame_buf = np.empty(
+            (
+                host_camera_stream.STREAM_HEIGHT,
+                host_camera_stream.STREAM_WIDTH,
+                host_camera_stream.STREAM_CHANNELS,
+            ),
+            dtype=np.uint8,
+        )
+        self._latest_frame_valid = False
 
         self.start()
 
@@ -709,7 +757,7 @@ class SO101Platform:
             return bool(self._raspi.value)
 
     def getWifiConnected(self) -> bool:
-        """True if the Pi reported WiFi connected (0xFF serial ack)."""
+        """True if the Pi reported WiFi connected (serial status byte bit 7 / BLE ntags bit 6)."""
         with self._lock:
             return bool(self._wifi.value)
 
@@ -790,14 +838,6 @@ class SO101Platform:
                 self._pending_ble[i] = byte
             self._pending_ble_valid.value = True
 
-    def connectToWifi(self, ssid: str, password: str) -> None:
-        """Send SSID and password to the Pi via ESP32 (BLE 'U' then 'P' packets).
-        Note: Experimental — do not use for now."""
-        if not self.running:
-            raise RuntimeError("Call start() before connectToWifi()")
-        self._ble_write_queue.put(_pack_wifi_user(ssid))
-        self._ble_write_queue.put(_pack_wifi_pass(password))
-
     def _stop_camera_stream_receiver(self) -> None:
         self._stream_dispatch_stop.set()
         if self._stream_dispatch_thread is not None:
@@ -813,6 +853,10 @@ class SO101Platform:
         self._frame_ready.clear()
         with self._frame_lock:
             self._frame_seq.value = 0
+            self._frame_write_slot.value = 0
+            self._frame_read_slot.value = 0
+        with self._latest_frame_lock:
+            self._latest_frame_valid = False
 
     def _stream_frame_dispatch_loop(self) -> None:
         last_seq = 0
@@ -825,20 +869,36 @@ class SO101Platform:
         while not self._stream_dispatch_stop.is_set():
             if not self._frame_ready.wait(timeout=0.05):
                 continue
+            self._frame_ready.clear()
             with self._frame_lock:
                 seq = int(self._frame_seq.value)
-            if seq == last_seq:
-                continue
-            last_seq = seq
-            frame = (
-                np.frombuffer(self._frame_buf, dtype=np.uint8, count=nbytes)
-                .reshape(shape)
-                .copy()
-            )
-            self._on_frame_callback(frame)
+                if seq <= last_seq:
+                    continue
+                last_seq = seq
+                slot = int(self._frame_read_slot.value) % host_camera_stream.STREAM_BUFFER_COUNT
+                offset = slot * nbytes
+                frame = np.frombuffer(
+                    self._frame_buf.get_obj(),
+                    dtype=np.uint8,
+                    offset=offset,
+                    count=nbytes,
+                ).reshape(shape)
+            with self._latest_frame_lock:
+                np.copyto(self._latest_frame_buf, frame)
+                self._latest_frame_valid = True
+            cb = self._on_frame_callback
+            if cb is not None:
+                cb(frame)
 
-    def setTagDetectionMode(self, family: str) -> None:
-        """Forward tag-detection mode to the Pi ('tag16h5', 'tag25h9', 'tag36h11'). Stops host RTP receiver."""
+    def imread(self) -> np.ndarray | None:
+        """Return the latest BGR frame from the Pi camera stream (1280×720), or ``None`` if none yet."""
+        with self._latest_frame_lock:
+            if not self._latest_frame_valid:
+                return None
+            return self._latest_frame_buf.copy()
+
+    def setTagFamily(self, family: str) -> None:
+        """Forward tag family to the Pi ('tag16h5', 'tag25h9', 'tag36h11'). Stops host RTP receiver."""
         self._stop_camera_stream_receiver()
         fam = family.lower().replace("-", "").replace("_", "")
         cmd_by_family = {
@@ -850,38 +910,51 @@ class SO101Platform:
             raise ValueError(f"Unknown tag family {family!r}")
         self._queue_ble_command(_pack_raspi_ble_command(cmd_by_family[fam]))
 
-    def enableCameraStreamMode(
+    def videoCapture(
         self,
-        onFrameCallback: Callable[[np.ndarray], None],
+        callback: Callable[[np.ndarray], None] | None = None,
         *,
         host: str | None = None,
         port: int = 5000,
+        wait_wifi_s: float = 15.0,
     ) -> str:
-        """Forward RTP stream command to the Pi and receive H.264 on this host (UDP port).
+        """Start Pi RTP camera stream (1280×720 BGR). Read frames with :meth:`imread`.
 
         Args:
-            onFrameCallback: Called on a background thread for each BGR frame (1280×720).
+            callback: Optional; called on a background thread for each decoded frame.
+                Prefer :meth:`imread` on the main thread for OpenCV GUI work.
             host: Destination IP for the Pi RTP sender; default is this PC's LAN IP.
             port: UDP port (default 5000).
+            wait_wifi_s: Seconds to wait for Pi WiFi status over BLE before failing.
 
         Returns the host IP sent to the Pi.
         """
-        if not self.getWifiConnected():
-            raise RuntimeError("WiFi not connected, cannot enable camera stream mode")
+        deadline = time.monotonic() + max(0.0, wait_wifi_s)
+        while not self.getWifiConnected():
+            if not self.running:
+                raise RuntimeError("BLE worker not running")
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    "WiFi not connected on Pi (timed out waiting for BLE status)"
+                )
+            time.sleep(0.05)
 
         self._stop_camera_stream_receiver()
 
         if host is None:
             host = get_lan_ip()
 
-        self._on_frame_callback = onFrameCallback
+        self._on_frame_callback = callback
         self._stream_proc = host_camera_stream.run_receive_stream(
             port,
             self._frame_buf,
+            self._frame_write_slot,
+            self._frame_read_slot,
             self._frame_ready,
             self._frame_seq,
             self._frame_lock,
             self._stream_stop,
+            mp_context=MP_CTX,
         )
         self._stream_dispatch_stop.clear()
         self._stream_dispatch_thread = threading.Thread(
@@ -898,8 +971,9 @@ class SO101Platform:
         """Start (or restart) the BLE worker. Called automatically from ``__init__``."""
         if self._proc is not None and self._proc.is_alive():
             return
+        self._closed = False
         self._stop.clear()
-        self._proc = mp.Process(
+        self._proc = MP_CTX.Process(
             target=_ble_worker,
             args=(
                 self._device_name,
@@ -921,7 +995,6 @@ class SO101Platform:
                 self._tag_blob,
                 self._raspi,
                 self._wifi,
-                self._ble_write_queue,
                 self._lock,
             ),
             daemon=True,
@@ -929,6 +1002,10 @@ class SO101Platform:
         self._proc.start()
 
     def stop(self) -> None:
+        """Stop BLE worker and camera stream. Called automatically from ``__del__``."""
+        if self._closed:
+            return
+        self._closed = True
         self._stop.set()
         self._stop_camera_stream_receiver()
         if self._proc is not None:
@@ -942,3 +1019,9 @@ class SO101Platform:
             self._wifi,
             self._lock,
         )
+
+    def __del__(self) -> None:
+        try:
+            self.stop()
+        except Exception:
+            pass

@@ -4,21 +4,40 @@ The Pi camera finds **tag16h5** tags and streams them to the robot over USB. Hos
 
 ## Pi setup
 
-### 1. Camera (`/boot/firmware/config.txt`)
+Run once on the Pi (idempotent — safe if some steps were already done manually):
+
+```bash
+cd ~/SO101Base/SOBle/raspi   # adjust path to your clone
+chmod +x install-detect-atags-service.sh run_detect_atags.sh
+./install-detect-atags-service.sh
+```
+
+The installer:
+
+1. Installs apt packages (camera, AprilTags, serial, GStreamer)
+2. Ensures `/boot/firmware/config.txt` (or `/boot/config.txt`) has imx708 + KMS overlays
+3. Ensures `bcm2835-codec` modprobe + `/etc/modules` entry for hardware H.264
+4. Adds your user to `video` and `dialout`
+5. Installs and enables the `detect-atags` systemd user service
+
+Reboot if prompted (boot config / codec module). Log out and back in if prompted (`video` / `dialout`).
+
+### Manual reference
+
+<details>
+<summary>What the installer configures (if you prefer to edit by hand)</summary>
+
+#### 1. Camera (`/boot/firmware/config.txt`)
 
 ```ini
-# Automatically load overlays for detected cameras
 camera_auto_detect=0
 dtoverlay=imx708
-
 dtoverlay=vc4-kms-v3d,cma-128
 ```
 
 Reboot after editing.
 
-### 2. Hardware H.264 encoder
-
-Enable the `bcm2835-codec` module for `v4l2h264enc` (used by the RTP stream).
+#### 2. Hardware H.264 encoder
 
 `/etc/modprobe.d/bcm2835-codec.conf`:
 
@@ -34,9 +53,7 @@ bcm2835-codec
 
 Reboot after editing.
 
-### 3. Packages
-
-One install covers AprilTag detection (`detect_atags.py`) and GStreamer camera streaming (`camera_stream.py`).
+#### 3. Packages
 
 ```bash
 sudo apt-get update
@@ -50,7 +67,9 @@ sudo apt-get install -y \
 sudo usermod -aG video,dialout "$USER"
 ```
 
-Log out and back in (or reboot). Clone the repo to e.g. `~/SO101Base`.
+Log out and back in (or reboot).
+
+</details>
 
 | Component | Packages |
 |-----------|----------|
@@ -80,10 +99,9 @@ SERIAL_PORT=/dev/ttyACM0 ./run_detect_atags.sh
 
 ### Autostart at login
 
+Included in `./install-detect-atags-service.sh` (see [Pi setup](#pi-setup)). To install only the service after manual setup, run that script again — it is idempotent.
+
 ```bash
-cd ~/SO101Base/SOBle/raspi
-chmod +x install-detect-atags-service.sh run_detect_atags.sh
-./install-detect-atags-service.sh
 journalctl --user -u detect-atags -f
 ```
 
@@ -136,7 +154,7 @@ The host sends **its own LAN IP and UDP port** (default `5000`) to the Pi; the P
 
 ## Troubleshooting
 
-- **Serial permission** — user in `dialout`; check `SERIAL_PORT` (`/dev/ttyUSB0` default).
+- **Serial permission** — user in `dialout`; check `SERIAL_PORT` (`/dev/ttyACM0` default).
 - **Camera** — user in `video`; reboot after install; only one process may use the camera.
 - **Stream won't start** — confirm WiFi on the Pi (`nmcli`); ESP32 USB serial bridge must forward `CMD_STREAM` to `detect_atags.py`.
 - **GStreamer** — `gst-inspect-1.0 libcamerasrc` and `gst-inspect-1.0 v4l2h264enc` should succeed on the Pi; `bcm2835-codec` loaded (`lsmod | grep bcm2835`).

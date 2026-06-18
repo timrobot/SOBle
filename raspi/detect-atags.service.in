@@ -10,7 +10,7 @@ WorkingDirectory=@REPO_DIR@
 ExecStart=@REPO_DIR@/run_detect_atags.sh
 Restart=on-failure
 RestartSec=5
-# Override in a drop-in if needed: Environment=SERIAL_PORT=/dev/ttyUSB0
+# Override in a drop-in if needed: Environment=SERIAL_PORT=/dev/ttyACM0
 
 [Install]
 WantedBy=default.target

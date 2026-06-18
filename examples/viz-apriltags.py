@@ -180,8 +180,6 @@ def main() -> int:
         pygame_loop(running, leader, platform)
     finally:
         running.clear()
-        platform.stop()
-        leader.stop()
 
     return 0
 

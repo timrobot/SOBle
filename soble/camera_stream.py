@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+import numpy as np
 import platform
 import signal
 import sys
@@ -16,6 +17,8 @@ STREAM_WIDTH = 1280
 STREAM_HEIGHT = 720
 STREAM_CHANNELS = 3
 STREAM_FRAME_BYTES = STREAM_WIDTH * STREAM_HEIGHT * STREAM_CHANNELS
+STREAM_BUFFER_COUNT = 2
+SHARED_FRAME_BYTES = STREAM_FRAME_BYTES * STREAM_BUFFER_COUNT
 
 _RTP_CAPS = (
     "application/x-rtp,media=video,encoding-name=H264,payload=96"
@@ -88,7 +91,10 @@ def build_receive_pipeline(port: int = 5000) -> str:
     """UDP/RTP H.264 → decoder → BGR appsink."""
     decoder = _decoder_element()
     return (
-        f'udpsrc port={int(port)} caps="{_RTP_CAPS}" ! '
+        # 1. buffer-size=2000000 expands the OS network stack UDP cache to 2MB to handle bursts.
+        f"udpsrc port={int(port)} buffer-size=2000000 caps=\"{_RTP_CAPS}\" ! "
+        # 2. rtpjitterbuffer collects, sorts, and reorders out-of-order wireless packets.
+        "rtpjitterbuffer latency=50 drop-on-latency=true ! "
         "rtph264depay ! "
         "h264parse ! "
         "queue max-size-buffers=1 leaky=downstream ! "
@@ -102,6 +108,8 @@ def build_receive_pipeline(port: int = 5000) -> str:
 def _receive_stream_worker(
     port: int,
     frame_buf: mp.Array,
+    write_slot: mp.Value,
+    read_slot: mp.Value,
     frame_ready: MpEvent,
     frame_seq: mp.Value,
     frame_lock: mp.Lock,
@@ -113,8 +121,6 @@ def _receive_stream_worker(
     from gi.repository import GLib, Gst  # noqa: E402
 
     Gst.init(None)
-    decoder = _decoder_element()
-    print(f"camera_stream: using H.264 decoder {decoder!r}", flush=True)
     pipeline = Gst.parse_launch(build_receive_pipeline(port))
     appsink = pipeline.get_by_name("sink")
     if appsink is None:
@@ -135,8 +141,16 @@ def _receive_stream_worker(
             n = map_info.size
             if n > STREAM_FRAME_BYTES:
                 return Gst.FlowReturn.OK
+
             with frame_lock:
-                frame_buf[:n] = bytes(map_info.data[:n])
+                slot = int(write_slot.value) % STREAM_BUFFER_COUNT
+                offset = slot * STREAM_FRAME_BYTES
+                obj = frame_buf.get_obj()
+                dest_arr = np.frombuffer(obj, dtype=np.uint8, offset=offset, count=n)
+                src_arr = np.frombuffer(map_info.data, dtype=np.uint8, count=n)
+                np.copyto(dest_arr, src_arr)
+                read_slot.value = slot
+                write_slot.value = 1 - slot
                 frame_seq.value += 1
             frame_ready.set()
         finally:
@@ -180,15 +194,29 @@ def _receive_stream_worker(
 def run_receive_stream(
     port: int,
     frame_buf: mp.Array,
+    write_slot: mp.Value,
+    read_slot: mp.Value,
     frame_ready: MpEvent,
     frame_seq: mp.Value,
     frame_lock: mp.Lock,
     stop: MpEvent,
+    *,
+    mp_context: mp.context.BaseContext | None = None,
 ) -> mp.Process:
     """Start the GStreamer receive loop in a child process."""
-    proc = mp.Process(
+    ctx = mp_context or mp
+    proc = ctx.Process(
         target=_receive_stream_worker,
-        args=(port, frame_buf, frame_ready, frame_seq, frame_lock, stop),
+        args=(
+            port,
+            frame_buf,
+            write_slot,
+            read_slot,
+            frame_ready,
+            frame_seq,
+            frame_lock,
+            stop,
+        ),
         daemon=True,
     )
     proc.start()

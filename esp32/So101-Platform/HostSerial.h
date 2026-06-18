@@ -1,7 +1,7 @@
 #ifndef HOSTSERIAL_H
 #define HOSTSERIAL_H
 
-#include "HardwareSerial.h"
+#include <Arduino.h>
 
 #define SMAXBYTES    512
 #define SMSGBYTES    256
@@ -19,7 +19,7 @@ private:
 #if defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)  // Teensy 4.x
   usb_serial_class& ser;
 #elif defined(ESP32) || defined(ARDUINO_ARCH_ESP32) || __AVR__
-  HardwareSerial& ser;
+  Stream& ser;
 #else
   Serial_& ser;
 #endif
@@ -41,7 +41,7 @@ public:
 #if defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)  // Teensy 4.x
   usb_serial_class& ser,
 #elif defined(ESP32) || defined(ARDUINO_ARCH_ESP32) || __AVR__
-  HardwareSerial& ser,
+  Stream& ser,
 #else
   Serial_& ser,
 #endif
@@ -49,7 +49,7 @@ public:
     int timeout=STIMEOUTMS
   );
 
-  void begin(const int64_t baudrate=115200);
+  void begin(const int64_t baudrate = 115200, int rxPin = -1, int txPin = -1);
   /**
    * Read message, null if there is nothing, STIMEOUT on timeout
    */

@@ -32,6 +32,9 @@ import gi
 gi.require_version("Gst", "1.0")
 from gi.repository import GLib, Gst  # noqa: E402
 
+# fork inherits picamera2/libcamera from detect_atags.py; spawn gives libcamerasrc a clean process
+_MP_CTX = mp.get_context("spawn")
+
 
 def build_pipeline(
     host: str,
@@ -107,13 +110,21 @@ def start_camera_stream(host: str, port: int, width: int, height: int, fps: int,
     return 0
 
 def run_camera_stream(host: str, port: int, width: int, height: int, fps: int, bitrate: int) -> mp.Process:
-    process = mp.Process(target=start_camera_stream, args=(host, port, width, height, fps, bitrate))
+    process = _MP_CTX.Process(
+        target=start_camera_stream,
+        args=(host, port, width, height, fps, bitrate),
+    )
     process.start()
     return process
 
-def stop_camera_stream(process: mp.Process) -> None:
+def stop_camera_stream(process: mp.Process | None) -> None:
+    if process is None or not process.is_alive():
+        return
     process.terminate()
-    process.join()
+    process.join(timeout=5.0)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=2.0)
 
 if __name__ == "__main__":
     process = run_camera_stream("255.255.255.255", 5000, 1280, 720, 30, 3000000)

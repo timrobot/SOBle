@@ -28,3 +28,7 @@ Open `So101-Platform/So101-Platform.ino` in Arduino IDE:
 - Board: **ESP32S3 Dev Module** (or Waveshare ESP32-S3-LCD-1.3)
 - ESP32 core: **4.x**
 - Libraries: Arduino_GFX, NimBLE / ESP32 BLE (as used by the sketch)
+
+## Pi USB serial
+
+The Waveshare board’s Type-C port uses a **CH343P USB-UART bridge** (not ESP32 USB CDC). Pi traffic is on **UART0** (`GPIO43` TX / `GPIO44` RX). `detect_atags.py` talks to `/dev/ttyACM0` on the Pi; the ESP32 must read `HardwareSerial(0)` on those pins — not `Serial` (native CDC).

@@ -5,7 +5,7 @@ set -euo pipefail
 RASPI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$RASPI_DIR"
 
-export SERIAL_PORT="${SERIAL_PORT:-/dev/ttyUSB0}"
+export SERIAL_PORT="${SERIAL_PORT:-/dev/ttyACM0}"
 export PYTHONUNBUFFERED="${PYTHONUNBUFFERED:-1}"
 
 if [[ -x "$RASPI_DIR/.venv/bin/python3" ]]; then

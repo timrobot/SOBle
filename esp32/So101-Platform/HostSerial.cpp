@@ -1,6 +1,9 @@
 #include "Arduino.h"
 #include "HostSerial.h"
 #include "Base64.h"
+#if defined(ESP32) || defined(ARDUINO_ARCH_ESP32) || __AVR__
+#include <HardwareSerial.h>
+#endif
 
 #define TOHEX(x) ((x) > 9 ? (x) - 10 + 'a' : (x) + '0')
 #define FROMHEX(x) ((x) <= '9' ? (x) - '0' : ((x) >= 'a' ? (x) - 'a' + 10 : (x) - 'A' + 10) )
@@ -14,7 +17,7 @@ HostSerial::HostSerial(
 #if defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)  // Teensy 4.x
   usb_serial_class& ser,
 #elif defined(ESP32) || defined(ARDUINO_ARCH_ESP32) || __AVR__
-  HardwareSerial& ser,
+  Stream& ser,
 #else
   Serial_& ser,
 #endif
@@ -27,14 +30,28 @@ HostSerial::HostSerial(
   memset(writebuf, 0, sizeof(writebuf));
 }
 
-void HostSerial::begin(const int64_t baudrate) {
+void HostSerial::begin(const int64_t baudrate, int rxPin, int txPin) {
   #if defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)  // Teensy 4.x
   ser.begin(baudrate);
-  #elif defined(ESP32) || defined(ARDUINO_ARCH_ESP32) || __AVR__
-  ser.begin(baudrate);
+  #elif defined(ESP32) || defined(ARDUINO_ARCH_ESP32)
+  #if ARDUINO_USB_CDC_ON_BOOT
+  if (&ser == (Stream *)&Serial) {
+    Serial.begin((uint32_t)baudrate);
+    lastReadTime = millis();
+    return;
+  }
+  #endif
+  if (rxPin >= 0 && txPin >= 0) {
+    static_cast<HardwareSerial &>(ser).begin(baudrate, SERIAL_8N1, rxPin, txPin);
+  } else {
+    static_cast<HardwareSerial &>(ser).begin(baudrate);
+  }
+  #elif __AVR__
+  static_cast<HardwareSerial &>(ser).begin(baudrate);
   #else
   ser.begin(baudrate);
   #endif
+  lastReadTime = millis();
 }
 
 message_t *HostSerial::readMessage(void) {
@@ -49,7 +66,7 @@ message_t *HostSerial::readMessage(void) {
     nbytes = ser.readBytes(&readbuf[readptr], ser.available());
     readptr += nbytes;
     readbuf[readptr] = '\0';
-    if ((delim = strchr(readbuf, '\n')) == (char *)-1) {
+    if ((delim = strchr(readbuf, '\n')) == NULL) {
       return nullptr; // no message found
     }
     delim[0] = '\0'; // marker
@@ -100,42 +117,40 @@ void HostSerial::writeBytes(void *data, int len) {
   uint8_t chksum = 0, chkA = 0, chkB = 0, lenA = 0, lenB = 0;
   uint8_t *ptr = (uint8_t *)writebuf;
 
-  if ((msec - lastWriteTime) >= _timeout) {
-    if (len >= 0) {
-      nbytes = encode_base64((uint8_t *)data, len, (uint8_t *)writebuf);
-      for (i = 0; i < nbytes; i++) {
-        chksum ^= (*ptr++);
-      }
-    } else {
-      nbytes = 0;
+  if (len >= 0) {
+    nbytes = encode_base64((uint8_t *)data, len, (uint8_t *)writebuf);
+    for (i = 0; i < nbytes; i++) {
+      chksum ^= (*ptr++);
     }
-
-    nbytes += 5; // devid len1 len2 DATA chk1 chk2
-
-    lenA = (uint8_t)((nbytes & 0xF0) >> 4);
-    lenA = TOHEX(lenA);
-    lenB = (uint8_t)(nbytes & 0x0F);
-    lenB = TOHEX(lenB);
-
-    chksum ^= (devid + '0') ^ lenA ^ lenB;
-    
-    chkA = (chksum & 0xF0) >> 4;
-    chkA = TOHEX(chkA);
-    chkB = (chksum & 0x0F);
-    chkB = TOHEX(chkB);
-
-    lastWriteTime = msec;
-    ser.write(devid + '0');
-    ser.write(lenA);
-    ser.write(lenB);
-    if (nbytes > 0) {
-      ser.write(writebuf);
-    }
-    ser.write(chkA);
-    ser.write(chkB);
-    ser.write('\n');
-    ser.flush();
+  } else {
+    nbytes = 0;
   }
+
+  nbytes += 5; // devid len1 len2 DATA chk1 chk2
+
+  lenA = (uint8_t)((nbytes & 0xF0) >> 4);
+  lenA = TOHEX(lenA);
+  lenB = (uint8_t)(nbytes & 0x0F);
+  lenB = TOHEX(lenB);
+
+  chksum ^= (devid + '0') ^ lenA ^ lenB;
+
+  chkA = (chksum & 0xF0) >> 4;
+  chkA = TOHEX(chkA);
+  chkB = (chksum & 0x0F);
+  chkB = TOHEX(chkB);
+
+  lastWriteTime = msec;
+  ser.write(devid + '0');
+  ser.write(lenA);
+  ser.write(lenB);
+  if (nbytes > 5) {
+    ser.write(writebuf, nbytes - 5);
+  }
+  ser.write(chkA);
+  ser.write(chkB);
+  ser.write('\n');
+  ser.flush();
 }
 
 void HostSerial::print(char data) { ser.print(data); }

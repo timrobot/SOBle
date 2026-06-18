@@ -15,7 +15,7 @@ static const uint8_t RESP_FRAME_LEN = 8;
 
 static const uint32_t kRxIdleUs = 400;
 static const uint32_t kRxMaxUs = 8000;
-static constexpr uint8_t kWheelAcceleration = 200;
+static constexpr uint8_t kWheelAcceleration = 0;
 
 STSDriver::STSDriver(uint8_t uartNum, int rxPin, int txPin, uint32_t baud)
     : _serial(uartNum),

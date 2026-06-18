@@ -19,6 +19,11 @@ Arduino_DataBus *bus = new Arduino_ESP32SPI(38 /* DC */, 39 /* CS */, 40 /* SCK 
 Arduino_GFX *gfx = new Arduino_ST7789(bus, 42 /* RST */, 1 /* rotation: 90° CW */, true /* IPS */, 240,
                                         240, 0, 0, 0, 0);
 
+// Pi USB (Type-C → CH343P USB-UART bridge → ESP32 UART0). Not USB CDC Serial.
+#define RASPI_RX 44  // U0RXD ← CH343 TX
+#define RASPI_TX 43  // U0TXD → CH343 RX
+#define RASPI_BAUD 115200
+
 // STS serial bus on the 16-pin header (see Waveshare schematic GPIO_OUT / H2+H1).
 // ESP32 RX ← STS TX, ESP32 TX → STS RX
 #define ARM_RX 1   // ← STS TX
@@ -73,23 +78,21 @@ static constexpr uint8_t CMD_TAG16H5 = '1';
 static constexpr uint8_t CMD_TAG25H9 = '2';
 static constexpr uint8_t CMD_TAG36H11 = '3';
 static constexpr uint8_t CMD_STREAM = 'A';
-// static constexpr uint8_t CMD_WIFIUSER = 'U';
-// static constexpr uint8_t CMD_WIFIPASS = 'P';
-// static constexpr uint8_t CMD_WIFI_TO_PI = 'W';
 static constexpr size_t RASPI_CMD_PAYLOAD_LEN = 7;
-// static constexpr size_t WIFI_CRED_MAX = 128;
-// static constexpr size_t WIFI_CRED_FRAME_MAX = 3 + 2 * (WIFI_CRED_MAX - 1);
 
 RobotCommand targets;
 RobotState st;
 
-// static char wifi_username[WIFI_CRED_MAX];
-// static char wifi_password[WIFI_CRED_MAX];
-// static uint8_t wifi_creds[WIFI_CRED_FRAME_MAX];
-
-HostSerial hostSerial(Serial, 1);
+HardwareSerial RaspiSerial(0);
+HostSerial hostSerial(RaspiSerial, 1);
 static uint8_t raspi_alive = 0;
-// static uint8_t wifi_connected = 0;
+static uint8_t wifi_connected = 0;
+static uint8_t disp_raspi_alive = 0xFF;
+static uint8_t disp_wifi_connected = 0xFF;
+
+static constexpr int16_t kDispStatusPiY = 100;
+static constexpr int16_t kDispStatusWifiY = 124;
+static constexpr int16_t kDispStatusLineH = 20;
 
 STSDriver sts(2, ARM_RX, ARM_TX, ARM_BAUD);
 static bool stsHaltSent = false;
@@ -102,26 +105,6 @@ static uint16_t gWheelRawPos[2] = {0, 0};
 static constexpr float MADGWICK_BETA = 0.06f;
 Madgwick imuFilter(MADGWICK_BETA);
 static uint32_t imuMicrosPrev = 0;
-
-// static void sendWifiUserPass() {
-//   const size_t userLen = strlen(wifi_username);
-//   const size_t passLen = strlen(wifi_password);
-//   if (userLen == 0 || passLen == 0) {
-//     return;
-//   }
-//   if (userLen > 255 || passLen > 255) {
-//     return;
-//   }
-//   wifi_creds[0] = CMD_WIFI_TO_PI;
-//   wifi_creds[1] = (uint8_t)userLen;
-//   wifi_creds[2] = (uint8_t)passLen;
-//   memcpy(&wifi_creds[3], wifi_username, userLen);
-//   memcpy(&wifi_creds[3 + userLen], wifi_password, passLen);
-//   const size_t totalLen = 3 + userLen + passLen;
-//   hostSerial.writeBytes((void *)wifi_creds, (int)totalLen);
-//   wifi_username[0] = '\0';
-//   wifi_password[0] = '\0';
-// }
 
 struct CbServer : BLEServerCallbacks {
   void onConnect(BLEServer *) { bleClientConnected = true; }
@@ -161,29 +144,9 @@ struct CbChar : BLECharacteristicCallbacks {
       case CMD_TAG36H11:
       case CMD_STREAM:
         if (n >= RASPI_CMD_PAYLOAD_LEN) {
-          // hostSerial.writeBytes((void *)buf, RASPI_CMD_PAYLOAD_LEN);
+          hostSerial.writeBytes((void *)buf, RASPI_CMD_PAYLOAD_LEN);
         }
         break;
-
-      // case CMD_WIFIUSER: {
-      //   const size_t copyLen = (n > 1) ? min(n - 1, WIFI_CRED_MAX - 1) : 0;
-      //   if (copyLen > 0) {
-      //     memcpy(wifi_username, buf + 1, copyLen);
-      //   }
-      //   wifi_username[copyLen] = '\0';
-      //   sendWifiUserPass();
-      //   break;
-      // }
-
-      // case CMD_WIFIPASS: {
-      //   const size_t copyLen = (n > 1) ? min(n - 1, WIFI_CRED_MAX - 1) : 0;
-      //   if (copyLen > 0) {
-      //     memcpy(wifi_password, buf + 1, copyLen);
-      //   }
-      //   wifi_password[copyLen] = '\0';
-      //   sendWifiUserPass();
-      //   break;
-      // }
 
       default:
         break;
@@ -323,30 +286,55 @@ static void updateIMU() {
   imuFilter.updateIMU(gx * DEG_TO_RAD, gy * DEG_TO_RAD, gz * DEG_TO_RAD, ax, ay, az, dt);
 }
 
+static void drawStatusLine(int16_t y, const char *label, bool ok) {
+  gfx->fillRect(8, y, 224, kDispStatusLineH, RGB565_BLACK);
+  gfx->setTextSize(2);
+  gfx->setCursor(8, y);
+  if (ok) {
+    gfx->setTextColor(RGB565(0, 255, 0), RGB565_BLACK);
+    gfx->print(label);
+    gfx->println(" online");
+  } else {
+    gfx->setTextColor(RGB565_DARKGREY, RGB565_BLACK);
+    gfx->print(label);
+    gfx->println(" offline");
+  }
+}
+
+static void updateStatusDisplayIfChanged() {
+  if (raspi_alive != disp_raspi_alive) {
+    disp_raspi_alive = raspi_alive;
+    drawStatusLine(kDispStatusPiY, "Pi", raspi_alive != 0);
+  }
+  if (wifi_connected != disp_wifi_connected) {
+    disp_wifi_connected = wifi_connected;
+    drawStatusLine(kDispStatusWifiY, "WiFi", wifi_connected != 0);
+  }
+}
+
 static void initDisplay() {
   gfx->fillScreen(RGB565_BLACK);
 
   gfx->setTextColor(RGB565_CYAN, RGB565_BLACK);
-  gfx->setTextSize(1);
+  gfx->setTextSize(2);
   gfx->setCursor(8, 8);
-  gfx->println("Bluetooth");
+  gfx->println("BLE Name");
 
   gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
-  gfx->setTextSize(2);
-  gfx->setCursor(8, 22);
+  gfx->setTextSize(3);
+  gfx->setCursor(8, 32);
   gfx->println(kName);
 }
 
 void setup() {
   gfx->begin(40000000);
   initDisplay();
+  updateStatusDisplayIfChanged();
 
-  hostSerial.begin(115200);
+  hostSerial.begin(RASPI_BAUD, RASPI_RX, RASPI_TX);
 
   memset(&targets, 0, sizeof(targets));
   memset(&st, 0, sizeof(st));
-  // wifi_username[0] = '\0';
-  // wifi_password[0] = '\0';
 
   QMI8658_Init();
   imuMicrosPrev = micros();
@@ -381,37 +369,32 @@ void setup() {
 }
 
 void loop() {
-  updateIMU();  
-  // message_t *msg = hostSerial.readMessage();
-  // if (msg == STIMEOUT) {
-  //   st.ntags = 0;
-  //   memset(st.tags, 0, 10 * sizeof(AprilTagInfo));
-  //   raspi_alive = 0;
-  //   // wifi_connected = 0;
-  // } else if (msg != nullptr && msg->length >= 1) {
-  //   raspi_alive = 1;
-  //   // if (msg->data[0] == 255) {
-  //   //   wifi_connected = 1;
-  //   // } else {
-  //   if (msg->data[0] != 255) {
-  //     st.ntags = msg->data[0];
-  //     if (st.ntags > 10) {
-  //       st.ntags = 10;
-  //     }
-  //     const size_t need = 1 + (size_t)st.ntags * sizeof(AprilTagInfo);
-  //     if (msg->length >= (int)need && st.ntags > 0) {
-  //       memcpy(st.tags, &msg->data[1], st.ntags * sizeof(AprilTagInfo));
-  //     } else if (st.ntags > 0) {
-  //       st.ntags = 0;
-  //     }
-  //     if (st.ntags < 10) {
-  //       memset(&st.tags[st.ntags], 0, (10 - st.ntags) * sizeof(AprilTagInfo));
-  //     }
-  //     st.ntags &= 0x1F;
-  //     st.ntags |= (raspi_alive << 7); // | (wifi_connected << 6); // combined message hack
-  //   }
-  //   // }
-  // }
+  updateIMU();
+  message_t *msg = hostSerial.readMessage();
+  if (msg == STIMEOUT) {
+    st.ntags = 0;
+    memset(st.tags, 0, 10 * sizeof(AprilTagInfo));
+    raspi_alive = 0;
+    wifi_connected = 0;
+  } else if (msg != nullptr && msg->length >= 1) {
+    raspi_alive = 1;
+    wifi_connected = (msg->data[0] & 0x80) >> 7; // first bit is wifi_connected status
+    st.ntags = msg->data[0] & 0x1F; // the last 5 bits are the ntags count
+    if (st.ntags > 10) {
+      st.ntags = 10;
+    }
+    const size_t need = 1 + (size_t)st.ntags * sizeof(AprilTagInfo);
+    if (msg->length >= (int)need && st.ntags > 0) {
+      memcpy(st.tags, &msg->data[1], st.ntags * sizeof(AprilTagInfo));
+    } else if (st.ntags > 0) {
+      st.ntags = 0;
+    }
+    if (st.ntags < 10) {
+      memset(&st.tags[st.ntags], 0, (10 - st.ntags) * sizeof(AprilTagInfo));
+    }
+    st.ntags = st.ntags | (raspi_alive << 7) | (wifi_connected << 6); // restructure st.ntags for transmission
+  }
+  updateStatusDisplayIfChanged();
 
   const unsigned long currentMs = millis();
   const bool bleActive = isBleActive(currentMs);

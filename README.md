@@ -33,9 +33,6 @@ platform = SO101Platform("Capybara")  # sub in the name of your robot/So101 Plat
 positions = leader.getArmPositions()  # 6 ints, 0..4095
 platform.setArmPositions(positions)
 platform.setLeftRightMotors(0, 0)
-
-platform.stop()
-leader.stop()
 ```
 
 ---
@@ -81,7 +78,7 @@ There are a couple of examples to help you get started on your laptop if you jus
 | -------------------------------- | ------------------------------------------- |
 | [`examples/lead-follow.py`](examples/lead-follow.py)        | Leader → follower joint mirror; wheels at 0 |
 | [`examples/viz-apriltags.py`](examples/viz-apriltags.py)      | WASD drive, leader mirror, tag overlay      |
-| [`examples/open-camera-stream.py`](examples/open-camera-stream.py) | WiFi setup + RTP camera preview (`cv2`)     |
+| [`examples/open-camera-stream.py`](examples/open-camera-stream.py) | RTP camera preview (`cv2`)                  |
 
 
 AprilTag overlays need the robot’s Pi camera running tag detection and forwarding over BLE (separate Pi setup on the robot).
@@ -154,42 +151,31 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 | ------------------------------------------------------------------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `getRaspiAlive()`                                                  | `bool`                                        | Pi serial seen recently.                                                                                        |
 | `getApriltagTags()`                                                | `list[tuple[int, list[tuple[float, float]]]]` | Tag id plus four corner `(x, y)` pairs (**lb, rb, rt, lt**). Returns **`[]`** if no state yet or no tags in view. |
-| `getWifiConnected()`                                               | `bool`                                        | Pi WiFi up (`True` if online).                                                                                  |
-| `setTagDetectionMode(family)`                                      | —                                             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'`.                                                                      |
-| `enableCameraStreamMode(onFrameCallback, *, host=None, port=5000)` | `str` (host IP)                               | Pi streams camera over WiFi to this PC → BGR via `onFrameCallback`.                                             |
-| `connectToWifi(ssid, password)`                                    | —                                             | *Experimental — do not use for now.* Connects Pi to WiFi. Poll `getWifiConnected()` before streaming.           |
+| `getWifiConnected()`                                               | `bool`                                        | Pi WiFi up (`True` if online). Configure WiFi on the Pi manually.                                              |
+| `setTagFamily(family)`                                             | —                                             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'`.                                                                      |
+| `videoCapture(*, host=None, port=5000, wait_wifi_s=15, callback=None)` | `str` (host IP)                               | Start Pi RTP stream; read frames with `imread()`. Optional per-frame `callback`. Waits for Pi WiFi over BLE.   |
+| `imread()`                                                         | `np.ndarray` or `None`                        | Latest **1280×720** BGR frame, or `None` if none yet.                                                           |
 
 
-**Pi camera stream** — configure WiFi on the Pi first (`connectToWifi` is experimental). Each decoded frame is **1280×720** BGR on a background thread:
+**Pi camera stream** — configure WiFi on the Pi first (e.g. Raspberry Pi Imager or `nmcli`). Frames are **1280×720** BGR; poll with `imread()` on the main thread:
 
 ```python
-import time
 import cv2
 from soble import SO101Platform
 
 platform = SO101Platform("Capybara", log_state=False)  # BLE name on robot OLED
-running = True
 
-def on_frame(frame):
-    global running
-    cv2.imshow("SO101 camera", frame)
-    if cv2.waitKey(1) & 0xFF in (ord("q"), 27): # press Q or Esc to quit
-        running = False
-
+host = platform.videoCapture()
+print(f"Stream to {host}:5000 — press Q or Esc to quit")
 try:
-    # Start the camera stream
-    while not platform.getWifiConnected():
-        time.sleep(0.1)
-    host = platform.enableCameraStreamMode(on_frame)
-
-    # Do any other commands
-    while running:
-        platform.setArmPositions([2000, 2000, 1500, 2000, 2000, 2100])
-        platform.setLeftRightMotors(125, 125) # full-forward
-        time.sleep(0.04) # to prevent overload on the comms
+    while True:
+        frame = platform.imread()
+        if frame is not None:
+            cv2.imshow("SO101 camera", frame)
+        if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+            break
 finally:
     cv2.destroyAllWindows()
-    platform.stop()
 ```
 
 Full script: `examples/open-camera-stream.py`.
@@ -200,7 +186,7 @@ Full script: `examples/open-camera-stream.py`.
 | Item         | Value                                                                               |
 | ------------ | ----------------------------------------------------------------------------------- |
 | Image size   | **1280 × 720** pixels                                                               |
-| Tag family   | **tag16h5** by default; use `setTagDetectionMode()` for **tag25h9** or **tag36h11** |
+| Tag family   | **tag16h5** by default; use `setTagFamily()` for **tag25h9** or **tag36h11** |
 | Corner order | **lb, rb, rt, lt** — each corner `(x, y)` float pixels                              |
 | `x` range    | **0 … 1280**                                                                        |
 | `y` range    | **0 … 720**                                                                         |

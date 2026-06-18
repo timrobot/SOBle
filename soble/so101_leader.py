@@ -281,6 +281,7 @@ class SO101Leader:
         self._port = port
         self._baud = baud
         self._poll_interval_s = poll_interval_s
+        self._closed = False
 
         if config_path is not None:
             if leader_limits is not None or follower_limits is not None:
@@ -335,6 +336,7 @@ class SO101Leader:
         """Start (or restart) the serial reader. Called automatically from ``__init__``."""
         if self._proc is not None and self._proc.is_alive():
             return
+        self._closed = False
         self._stop.clear()
         self._proc = mp.Process(
             target=_so101_leader_worker,
@@ -369,7 +371,17 @@ class SO101Leader:
             return list(self._follower_raws[:])
 
     def stop(self) -> None:
+        """Stop the serial reader. Called automatically from ``__del__``."""
+        if self._closed:
+            return
+        self._closed = True
         self._stop.set()
         if self._proc is not None:
             self._proc.join(timeout=2.0)
             self._proc = None
+
+    def __del__(self) -> None:
+        try:
+            self.stop()
+        except Exception:
+            pass

@@ -8,13 +8,6 @@ if __name__ == "__main__":
 
     platform.setLeftRightMotors(0, 0)
 
-    try:
-        while True:
-            positions = leader.getArmPositions()
-            platform.setArmPositions(positions)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        platform.stop()
-        leader.stop()
-        print("Stopped.")
+    while True:
+        positions = leader.getArmPositions()
+        platform.setArmPositions(positions)
