@@ -277,7 +277,7 @@ If you plan to add the **Raspi camera attachment**, print [`so101-pcb-camera-wri
 
 1. **Camera to Pi** — Connect the **Arducam IMX708** camera module to the **Raspberry Pi Zero 2 W** camera port.
 2. **Mount Pi + camera** — Secure the camera and Pi Zero 2 W to the cam mount.
-3. **SD card** — Flash an SD card with **Raspberry Pi OS**.
+3. **SD card** — Flash an SD card with **Raspberry Pi OS**. Setup the WiFi if you require video streaming.
 4. **AprilTag service** — Boot the Pi, copy the `SOBle/raspi` tree onto it, and run:
 
    ```bash
