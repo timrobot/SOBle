@@ -341,7 +341,7 @@ You can now control the robot using **WASD** and the leader arm.
 
 ## Raspi camera attachment *(optional)*
 
-If you plan to add the **Raspi camera attachment**, print [`so101-pcb-camera-wrist-mount.stl`](../STL/Optional/so101-pcb-camera-wrist-mount.stl) and mount it on the gripper as shown:
+If you plan to add the **Raspi camera attachment**, print [`SO-ARM101_IMX708_wrist_mount.stl`](../STL/Optional/SO-ARM101_IMX708_wrist_mount.stl) and mount it on the gripper as shown:
 
 <img src="CamMount.png" height="280" alt="Camera mount">
 
