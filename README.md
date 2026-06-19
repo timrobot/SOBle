@@ -162,40 +162,20 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 | `imread()`                                                         | `np.ndarray` or `None`                        | Latest **1280×720** BGR frame, or `None` if none yet.                                                           |
 
 
-**Pi camera stream** — configure WiFi on the Pi first (e.g. Raspberry Pi Imager or `nmcli`). Frames are **1280×720** BGR; poll with `imread()` on the main thread:
-
-```python
-import cv2
-from soble import SO101Platform
-
-platform = SO101Platform("Capybara", log_state=False)  # BLE name on robot OLED
-
-host = platform.videoCapture()
-print(f"Stream to {host}:5000 — press Q or Esc to quit")
-try:
-    while True:
-        frame = platform.imread()
-        if frame is not None:
-            cv2.imshow("SO101 camera", frame)
-        if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
-            break
-finally:
-    cv2.destroyAllWindows()
-```
-
-Full script: `examples/open-camera-stream.py`.
-
 #### AprilTags — corners and image
 
+*Specifications:*
 
 | Item         | Value                                                                               |
 | ------------ | ----------------------------------------------------------------------------------- |
 | Image size   | **1280 × 720** pixels                                                               |
-| Tag family   | **tag16h5** by default; use `setTagFamily()` for **tag25h9** or **tag36h11** |
+| Tag family   | **tag16h5** by default; use `setTagFamily()` for **tag25h9** or **tag36h11**        |
 | Corner order | **lb, rb, rt, lt** — each corner `(x, y)` float pixels                              |
 | `x` range    | **0 … 1280**                                                                        |
 | `y` range    | **0 … 720**                                                                         |
 | Max tags     | **10**                                                                              |
+| `R`          | **3 × 3** rotation matrix (`np.ndarray`, `float64`)                                 |
+| `t`          | **3 × 1** translation vector (`np.ndarray`, `float64`)                              |
 
 
 **Example** — two tag16h5 tags in view:
@@ -220,4 +200,26 @@ Full script: `examples/open-camera-stream.py`.
 
 Each list entry is `(tag_id, corners_px)` with **four** `(x, y)` pixel pairs in **lb → rb → rt → lt** order.
 
-Reconnects if no state notify for **0.3 s** after the first good packet.
+
+#### Pi camera stream
+
+
+To view the camera, configure WiFi on the Pi first either at flash (Raspberry Pi Imager) or within terminal via `nmcli`. Frames can be read with `imread()`, and are **1280×720** BGR.
+
+```python
+import cv2
+from soble import SO101Platform
+
+platform = SO101Platform("Capybara", log_state=False)  # BLE name on robot OLED
+
+platform.videoCapture()
+print("Press Q or Esc to quit")
+while True:
+    frame = platform.imread()
+    if frame is not None:
+        cv2.imshow("SO101 camera", frame)
+    if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+        break
+```
+
+Full script: [`examples/open-camera-stream.py`](examples/open-camera-stream.py).
