@@ -321,7 +321,7 @@ If the board is already on the robot, **do not power the robot**. The SO101 Driv
    2. **No Raspi camera, UBEC USB-C** — Use a USB-C to USB-C cable from the UBEC to the LCD board.
    3. **No Raspi camera, UBEC header** — Plug the header into the right side of the LCD board (as shown).
 3. Plug the barrel connector into the SO101 Driver board.
-4. Insert the 7.4 V battery into the battery cage and secure it with the spring-loaded panel.
+4. Insert the 7.4 V battery into the battery cage and secure it with the **battery lock** ([Battery Lock.stl](../STL/KiloChassis/Base%20Components/Battery%20Lock.stl)).
 
 ---
 
