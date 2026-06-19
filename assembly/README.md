@@ -21,15 +21,15 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 1. Insert all **six ball bearings** onto the **omniwheel core**, then slide in the **bearing inner ring**.
 
-   <img src="1a.png" height="280" alt="Step 1a">
+   <img src="../media/1a.png" height="280" alt="Step 1a">
 
 2. Push the **bearing inner ring** against the balls while turning it so that the **protruding circle faces up**. Align the balls so they are spaced evenly at **60°**.
 
-   <img src="1b.png" height="280" alt="Step 1b">
+   <img src="../media/1b.png" height="280" alt="Step 1b">
 
 3. Push the **ball retainer** into the balls until it **snaps into place**.
 
-   <img src="1c.png" height="280" alt="Step 1c">
+   <img src="../media/1c.png" height="280" alt="Step 1c">
 
 ---
 
@@ -55,11 +55,11 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 1. Connect the **rear deadwheel bracket** to the **rear base** with the **main base bolt**.
 
-   <img src="3a.png" height="280" alt="Step 3a">
+   <img src="../media/3a.png" height="280" alt="Step 3a">
 
 2. Slide the **omni wheel** onto the rear axle and tighten the **rear wheel nut**.
 
-   <img src="3b.png" height="280" alt="Step 3b">
+   <img src="../media/3b.png" height="280" alt="Step 3b">
 
 3. Repeat **Steps 1–3** for the other side.
 
@@ -84,15 +84,15 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 1. Attach the **STS drive plate** to the **Feetech STS3215 servo** with the **Phillips screw**, then use the **four M3 × 5 mm screws** to bolt on the **servo coupler**.
 
-   <img src="4a.png" height="280" alt="Step 4a">
+   <img src="../media/4a.png" height="280" alt="Step 4a">
 
 2. Insert the **Feetech servo** assembly into the **servo bracket**.
 
-   <img src="4b.png" height="280" alt="Step 4b">
+   <img src="../media/4b.png" height="280" alt="Step 4b">
 
 3. Run the **main base bolt** through the **arm base** and tighten it on the **servo bracket**.
 
-   <img src="4c.png" height="280" alt="Step 4c">
+   <img src="../media/4c.png" height="280" alt="Step 4c">
 
 ---
 
@@ -111,15 +111,15 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 1. Insert all **six ball bearings** into the **wheel bearing bracket**, then slide in the **bearing inner ring**.
 
-   <img src="5a.png" height="280" alt="Step 5a">
+   <img src="../media/5a.png" height="280" alt="Step 5a">
 
 2. Push the **bearing inner ring** against the balls while turning it. Align the balls so they are spaced evenly at **60°**.
 
-   <img src="5b.png" height="280" alt="Step 5b">
+   <img src="../media/5b.png" height="280" alt="Step 5b">
 
 3. Push the **ball retainer** into the balls until it **snaps into place**.
 
-   <img src="5c.png" height="280" alt="Step 5c">
+   <img src="../media/5c.png" height="280" alt="Step 5c">
 
 ---
 
@@ -141,17 +141,17 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 1. Insert the **front axle** into the **front grip wheel**, then into the **traction wheel bearing**. Secure by pushing the **front axle clip** onto the axle.
 
-   <img src="6a.png" height="280" alt="Step 6a">
+   <img src="../media/6a.png" height="280" alt="Step 6a">
 
 2. Align the axle end to face the **servo axle plate**. Push together and secure by locking the **front drive bolt** into the arm base side thread.
 
-   <img src="6b.png" height="280" alt="Step 6b">
+   <img src="../media/6b.png" height="280" alt="Step 6b">
 
 3. Repeat **Steps 4–6** for the other side.
 
 4. Use **two main base bolts** to attach the **rear base** to the **arm base**.
 
-   <img src="6d.png" height="280" alt="Step 6d">
+   <img src="../media/6d.png" height="280" alt="Step 6d">
 
 ---
 
@@ -172,15 +172,15 @@ Build the follower arm per the official [LeRobot SO-101 assembly guide](https://
 
 1. Mount the **base of the SO101 follower arm** to the chassis. Insert all **four arm retainer pins** all the way into the holes.
 
-   <img src="7a.png" height="280" alt="Step 7a">
+   <img src="../media/7a.png" height="280" alt="Step 7a">
 
 2. Insert the **arm pin half bracket** on one of the pins on the bottom of the chassis and rotate it until it reaches the back.
 
-   <img src="7b.png" height="280" alt="Step 7b">
+   <img src="../media/7b.png" height="280" alt="Step 7b">
 
 3. Push the **arm pin mini bracket** into place and fasten using the **arm pin bolt**.
 
-   <img src="7c.png" height="280" alt="Step 7c">
+   <img src="../media/7c.png" height="280" alt="Step 7c">
 
 4. Repeat **7.2 and 7.3** for all pins.
 
@@ -220,7 +220,7 @@ The two **Feetech STS3215** traction-wheel servos ship with the factory ID. Each
 
 ## Step 9 — Install SOBle and flash firmware
 
-<img src="esp32s3lcd.png" height="280" alt="ESP32-S3 LCD board">
+<img src="../media/esp32s3lcd.png" height="280" alt="ESP32-S3 LCD board">
 
 If the board is already on the robot, **do not power the robot**. The SO101 Driver board may be damaged if the robot is powered without a shared ground.
 
@@ -249,17 +249,17 @@ If the board is already on the robot, **do not power the robot**. The SO101 Driv
 
 1. Insert the barrel connector and UBEC power wires into the XT60 female screw terminal, as shown in the diagram.
 
-   <img src="10a.png" height="280" alt="Step 10a">
+   <img src="../media/10a.png" height="280" alt="Step 10a">
 
 2. *Optional.* If you are planning to use the Raspi camera or you have *hooked jumpers*, you will have to do this. Be warned that this step is **irreversible**:
    1. Remove the header from the end of the UBEC.
    2. Insert the power wires into the USB-C female screw terminal, as shown in the diagram.
 
-   <img src="10b.png" height="280" alt="Step 10b">
+   <img src="../media/10b.png" height="280" alt="Step 10b">
 
 3. Solder the header pins onto the LCD board's right side. *(You may skip this step if you are using hooked jumpers.)*
 
-   <img src="10c.png" height="280" alt="Step 10c">
+   <img src="../media/10c.png" height="280" alt="Step 10c">
 
 ---
 
@@ -287,23 +287,23 @@ If the board is already on the robot, **do not power the robot**. The SO101 Driv
 
 1. Place the **LCD** onto the **ESP32 Mount** and insert **four M2×6 mm** screws.
 
-   <img src="11a.png" height="280" alt="Step 11a">
+   <img src="../media/11a.png" height="280" alt="Step 11a">
 
 2. Slide the **ESP32 Mount** onto the **rear base** and secure with the **ESP32 bolt**.
 
-   <img src="11b.png" height="280" alt="Step 11b">
+   <img src="../media/11b.png" height="280" alt="Step 11b">
 
 3. Secure the **clamp feet** to the **bus adapter** with the **bus adapter clamp bolt**.
 
-   <img src="11c.png" height="280" alt="Step 11c">
+   <img src="../media/11c.png" height="280" alt="Step 11c">
 
 4. Clamp the **top** and **bottom bus adapter brackets** onto the **SO101 Driver board**.
 
-   <img src="11d.png" height="280" alt="Step 11d">
+   <img src="../media/11d.png" height="280" alt="Step 11d">
 
 5. Insert the **top** and **bottom bus adapter brackets** into the **bus adapter**, slide on the **bus adapter bracket retainer**, and secure with the **bus adapter retainer bolt**.
 
-   <img src="11e.png" height="280" alt="Step 11e">
+   <img src="../media/11e.png" height="280" alt="Step 11e">
 
 6. Slide the **bus adapter** into the back of the **SO101 arm**.
 
@@ -346,7 +346,7 @@ You can now control the robot using **WASD** and the leader arm.
 
 If you plan to add the **Raspi camera attachment**, print [`SO-ARM101_IMX708_wrist_mount.stl`](../STL/Optional/SO-ARM101_IMX708_wrist_mount.stl) and mount it on the gripper as shown:
 
-<img src="CamMount.png" height="280" alt="Camera mount">
+<img src="../media/CamMount.png" height="280" alt="Camera mount">
 
 1. **Camera to Pi** — Connect the **Arducam IMX708** camera module to the **Raspberry Pi Zero 2 W** camera port.
 2. **Mount Pi + camera** — Secure the camera and Pi Zero 2 W to the cam mount.
@@ -369,19 +369,19 @@ More Pi details: [raspi/README.md](../raspi/README.md).
 
 | Step | Summary | Image |
 | ---- | ------- | ----- |
-| 1 | Omni-directional ball bearing | [1a.png](1a.png) · [1b.png](1b.png) · [1c.png](1c.png) |
+| 1 | Omni-directional ball bearing | [1a.png](../media/1a.png) · [1b.png](../media/1b.png) · [1c.png](../media/1c.png) |
 | 2 | Omni-directional rollers | — |
-| 3 | Rear omni-wheel assembly | [3a.png](3a.png) · [3b.png](3b.png) |
-| 4 | Traction wheel servo | [4a.png](4a.png) · [4b.png](4b.png) · [4c.png](4c.png) |
-| 5 | Traction wheel bearing | [5a.png](5a.png) · [5b.png](5b.png) · [5c.png](5c.png) |
-| 6 | Front wheel assembly | [6a.png](6a.png) · [6b.png](6b.png) · [6d.png](6d.png) |
-| 7 | Mount SO101 follower arm | [7a.png](7a.png) · [7b.png](7b.png) · [7c.png](7c.png) |
+| 3 | Rear omni-wheel assembly | [3a.png](../media/3a.png) · [3b.png](../media/3b.png) |
+| 4 | Traction wheel servo | [4a.png](../media/4a.png) · [4b.png](../media/4b.png) · [4c.png](../media/4c.png) |
+| 5 | Traction wheel bearing | [5a.png](../media/5a.png) · [5b.png](../media/5b.png) · [5c.png](../media/5c.png) |
+| 6 | Front wheel assembly | [6a.png](../media/6a.png) · [6b.png](../media/6b.png) · [6d.png](../media/6d.png) |
+| 7 | Mount SO101 follower arm | [7a.png](../media/7a.png) · [7b.png](../media/7b.png) · [7c.png](../media/7c.png) |
 | 8 | Configure left/right traction motor IDs (SO101 Driver board, jumpers B→A) | — |
-| 9 | Install SOBle and flash firmware | [esp32s3lcd.png](esp32s3lcd.png) |
-| 10 | Prepare cables and LCD header pins | [10a.png](10a.png) · [10b.png](10b.png) · [10c.png](10c.png) |
-| 11 | Mounting the Electronics | [11a.png](11a.png) · [11b.png](11b.png) · [11c.png](11c.png) · [11d.png](11d.png) · [11e.png](11e.png) |
+| 9 | Install SOBle and flash firmware | [esp32s3lcd.png](../media/esp32s3lcd.png) |
+| 10 | Prepare cables and LCD header pins | [10a.png](../media/10a.png) · [10b.png](../media/10b.png) · [10c.png](../media/10c.png) |
+| 11 | Mounting the Electronics | [11a.png](../media/11a.png) · [11b.png](../media/11b.png) · [11c.png](../media/11c.png) · [11d.png](../media/11d.png) · [11e.png](../media/11e.png) |
 | 12 | Wire arm UART, UBEC, and LCD power | — |
 | 13 | Power on, run `viz-apriltags.py` | — |
-| — | *Optional:* Raspi camera + AprilTag service | [CamMount.png](CamMount.png) |
+| — | *Optional:* Raspi camera + AprilTag service | [CamMount.png](../media/CamMount.png) |
 
 If a printed part name in your slicer folder differs from the labels above, match by shape to the step image.
