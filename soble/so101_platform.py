@@ -20,7 +20,7 @@ from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
 
 from soble import camera_stream as host_camera_stream
-from soble.arm_joints import parse_arm_joints
+from soble.arm_joints import ARM_JOINT_COUNT, parse_arm_joints
 
 # Linux default fork + asyncio/BlueZ D-Bus breaks BLE notify delivery in a child;
 # spawn gives the BLE worker a clean process on Linux (fork breaks BlueZ notify delivery).
@@ -36,7 +36,6 @@ CMD_TAG16H5 = ord("1")
 CMD_TAG25H9 = ord("2")
 CMD_TAG36H11 = ord("3")
 CMD_STREAM = ord("A")
-ARM_MOTOR_COUNT = 6  # 6 x 12-bit positions in armPos[9]
 ARM_ENABLE_MASK = 0x3F  # bit0=J1 .. bit5=J6 — all arm joints engaged
 ARM_CENTER_RAW = 2048  # mid of 0..4095 — default when leader not connected
 STATE_LEN = 201
@@ -218,7 +217,7 @@ def _unpack_arm12(packed: bytes) -> list[int]:
     byteidx = 0
     extract2 = True
     b = 0
-    for _ in range(ARM_MOTOR_COUNT):
+    for _ in range(ARM_JOINT_COUNT):
         a = packed[byteidx]
         byteidx += 1
         if extract2:
@@ -243,7 +242,7 @@ def _pack_robot_command(
 ) -> bytes:
     """BLE teleop: cmd='0' + left + right + arm[9] + enabled (bit0=J1 .. bit5=J6)."""
     if len(arm_packed) != 9:
-        arm_packed = _pack_arm12([ARM_CENTER_RAW] * ARM_MOTOR_COUNT)
+        arm_packed = _pack_arm12([ARM_CENTER_RAW] * ARM_JOINT_COUNT)
     left = max(-125, min(125, int(left)))
     right = max(-125, min(125, int(right)))
     enabled = 0 if arm_disabled else ARM_ENABLE_MASK
@@ -675,7 +674,7 @@ class SO101Platform:
         self._left_cmd = MP_CTX.Value("i", 0)
         self._right_cmd = MP_CTX.Value("i", 0)
         self._arm_packed = MP_CTX.Array(
-            "B", _pack_arm12([ARM_CENTER_RAW] * ARM_MOTOR_COUNT)
+            "B", _pack_arm12([ARM_CENTER_RAW] * ARM_JOINT_COUNT)
         )
         self._pending_ble = MP_CTX.Array("B", CMD_ACTUATOR_LEN)
         self._pending_ble_valid = MP_CTX.Value("b", False)
@@ -683,7 +682,7 @@ class SO101Platform:
         self._got_state = MP_CTX.Value("b", False)
         self._last_notify = MP_CTX.Value("d", 0.0)
         self._enc = MP_CTX.Array("i", 2)
-        self._arm_raw = MP_CTX.Array("i", ARM_MOTOR_COUNT)
+        self._arm_raw = MP_CTX.Array("i", ARM_JOINT_COUNT)
         self._quat = MP_CTX.Array("d", 4)
         self._quat[0] = 1.0
         self._ntags = MP_CTX.Value("i", 0)
@@ -735,7 +734,7 @@ class SO101Platform:
         with self._lock:
             if not self._got_state.value:
                 return []
-            return [int(self._arm_raw[i]) for i in range(ARM_MOTOR_COUNT)]
+            return [int(self._arm_raw[i]) for i in range(ARM_JOINT_COUNT)]
 
     def getIMUQuaternion(self) -> tuple[float, float, float, float]:
         """Unit quaternion (w, x, y, z)."""

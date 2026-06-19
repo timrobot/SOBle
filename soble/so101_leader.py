@@ -12,11 +12,10 @@ from pathlib import Path
 import numpy as np
 import serial
 
-from soble.arm_joints import parse_arm_joints
+from soble.arm_joints import ARM_JOINT_COUNT, parse_arm_joints
 
 MOTOR_IDS = [1, 2, 3, 4, 5, 6]
 JOINT_KEYS = ["J1", "J2", "J3", "J4", "J5", "J6"]
-ARM_MOTOR_COUNT = 6
 
 INST_SYNC_READ = 0x82
 INST_SYNC_WRITE = 0x83
@@ -24,7 +23,7 @@ REG_PRESENT_POSITION = 0x38
 REG_TORQUE_ENABLE = 40
 DATA_LEN = 2
 RESP_FRAME_LEN = 8
-EXPECTED_RX = ARM_MOTOR_COUNT * RESP_FRAME_LEN
+EXPECTED_RX = ARM_JOINT_COUNT * RESP_FRAME_LEN
 
 WRAP_OFFSET = 4096
 BELOW_MIN_MARGIN = 100
@@ -87,9 +86,9 @@ def _limits_from_so101_arm(arm_cfg: dict) -> list[JointLimits]:
             int(joint["max_limit"]),
         )
 
-    if len(by_id) != ARM_MOTOR_COUNT:
+    if len(by_id) != ARM_JOINT_COUNT:
         raise ValueError(
-            f"expected {ARM_MOTOR_COUNT} joints with ids 1..{ARM_MOTOR_COUNT}, "
+            f"expected {ARM_JOINT_COUNT} joints with ids 1..{ARM_JOINT_COUNT}, "
             f"got {len(by_id)}"
         )
     return [by_id[motor_id] for motor_id in MOTOR_IDS]
@@ -297,13 +296,13 @@ class SO101Leader:
             self._follower_limits = []
 
         self._lock = mp.Lock()
-        self._follower_raws = mp.Array("i", ARM_MOTOR_COUNT)
+        self._follower_raws = mp.Array("i", ARM_JOINT_COUNT)
         self._valid = mp.Value("b", False)
         self._arm_disabled = mp.Value("b", True)  # backdrivable by default
         self._stop = mp.Event()
         self._proc: mp.Process | None = None
 
-        if len(self._leader_limits) == ARM_MOTOR_COUNT:
+        if len(self._leader_limits) == ARM_JOINT_COUNT:
             self.start()
 
     @staticmethod

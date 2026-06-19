@@ -1,7 +1,7 @@
 """Host BLE API and leader-arm teleop for the SO101 platform."""
 
+from soble.arm_joints import ARM_JOINT_COUNT
 from soble.so101_leader import (
-    ARM_MOTOR_COUNT,
     DEFAULT_BAUD,
     JOINT_KEYS,
     JointLimits,
@@ -10,7 +10,7 @@ from soble.so101_leader import (
 from soble.so101_platform import SO101Platform, get_lan_ip
 
 __all__ = [
-    "ARM_MOTOR_COUNT",
+    "ARM_JOINT_COUNT",
     "DEFAULT_BAUD",
     "JOINT_KEYS",
     "JointLimits",
