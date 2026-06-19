@@ -70,7 +70,7 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 
 | Part | Qty | Notes |
 | ---- | --- | ----- |
-| Feetech STS3215 servo (1/345) | 1 | |
+| Feetech STS3215 servo (1/345) | 1 | From [sourcing table](../README.md#sourcing-parts) |
 | STS drive plate | 1 | |
 | Phillips screw | 1 | |
 | M3 × 5 mm screw | 4 | |
@@ -131,7 +131,7 @@ Each step has an illustration where noted (see the [quick reference](#quick-refe
 | Traction servo assembly | 1 | From Step 4 |
 | Traction wheel bearing | 1 | From Step 5 |
 | Front axle | 1 | [Front Axle Halve.stl](../STL/KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Halve.stl) |
-| Front grip wheel | 1 | 3D printed |
+| Front grip wheel | 1 | [Front Wheels Grippy v2.stl](../STL/KiloChassis/Front%20Drive/Front%20Wheels%20Grippy%20v2.stl) |
 | Front axle clip | 1 | [Front Axle Clip.stl](../STL/KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Clip.stl) |
 | Front drive bolt | 1 | [Front Drive Bolt.stl](../STL/KiloChassis/Bolts/Front%20Drive%20Bolt.stl) |
 | Main base bolt | 2 | [Main Base Bolt.stl](../STL/KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
@@ -188,7 +188,7 @@ Build the follower arm per the official [LeRobot SO-101 assembly guide](https://
 
 ## Step 8 — Configuring left and right motors
 
-The two **Feetech STS3215** traction-wheel servos ship with the factory ID. Each must be set to **ID 7 (left)** and **ID 8 (right)** before the robot is wired up. Use the **driver board** (not the LCD board) and keep the **two jumpers on B** until the end of this section.
+The two **Feetech STS3215** traction-wheel servos ship with the factory ID. Each must be set to **ID 7 (left)** and **ID 8 (right)** before the robot is wired up. Use the **SO101 Driver board** (not the LCD board) and keep the **two jumpers on B** until the end of this section.
 
 1. **Get the repo** (needed for `configure-left-right.py` and the rest of the build):
 
@@ -197,7 +197,7 @@ The two **Feetech STS3215** traction-wheel servos ship with the factory ID. Each
    cd SOBle
    ```
 
-2. Plug a **USB-C** cable from your computer into the **driver board**.
+2. Plug a **USB-C** cable from your computer into the **SO101 Driver board**.
 3. Plug in the **barrel jack** (UBEC / bench power — do not connect the battery yet if you are still on the bench).
 4. From the repo root, run the motor ID script (default port is macOS; Linux e.g. `/dev/ttyACM0`, Windows `COM3`):
 
@@ -210,16 +210,16 @@ The two **Feetech STS3215** traction-wheel servos ship with the factory ID. Each
 
 5. **Left motor only** — plug the left traction servo into the driver bus, press **Enter**, then **unplug** the left motor when the script says it succeeded.
 6. **Right motor only** — plug in the right traction servo, press **Enter**, then **unplug** the right motor when done.
-7. **Unplug all power** — disconnect the barrel jack and the USB-C cable from the driver board.
-8. Move the **two jumpers** on the driver board from **B** to **A**.
+7. **Unplug all power** — disconnect the barrel jack and the USB-C cable from the SO101 Driver board.
+8. Move the **two jumpers** on the SO101 Driver board from **B** to **A**.
 
 ---
 
-## Step 9 — Download SOBle and flash firmware
+## Step 9 — Install SOBle and flash firmware
 
 <img src="esp32s3lcd.png" height="280" alt="ESP32-S3 LCD board">
 
-If the board is already on the robot, **do not power the robot**. The driver board may be damaged if the robot is powered without a shared ground.
+If the board is already on the robot, **do not power the robot**. The SO101 Driver board may be damaged if the robot is powered without a shared ground.
 
 1. **Install the Python package** (if you have not already):
 
@@ -228,9 +228,17 @@ If the board is already on the robot, **do not power the robot**. The driver boa
    ```
 
 2. Plug a **USB-C** cable from your computer to the **LCD board**.
-3. **Flash firmware** — Open `esp32/So101-Platform/` in the Arduino IDE (or your usual ESP32 toolchain). Add the **esp32** boards library from the boards manager.
-4. On the port, select the **ESP32-S3 Dev Module** board type, click on the connected serial port, and upload the sketch. It should take around one minute.
-5. Unplug the USB-C cable from the LCD board.
+3. **Flash firmware** — Open `esp32/So101-Platform/` in the Arduino IDE (or your usual ESP32 toolchain). Add the **esp32** boards library from the boards manager and **GFX_Library_for_Arduino** from the Library Manager.
+4. **Apply the patch** — before uploading, run from the repo (required for the Waveshare LCD on ESP32 core 4.x):
+
+   ```bash
+   cd esp32
+   ./patches/apply.sh
+   ```
+
+   See [esp32/README.md](../esp32/README.md) for details.
+5. On the port, select the **ESP32-S3 Dev Module** board type, click on the connected serial port, and upload the sketch. It should take around one minute.
+6. Unplug the USB-C cable from the LCD board.
 
 ---
 
@@ -238,34 +246,74 @@ If the board is already on the robot, **do not power the robot**. The driver boa
 
 1. Insert the barrel connector and UBEC power wires into the XT60 female screw terminal, as shown in the diagram.
 
-   <img src="9a.png" height="280" alt="Step 10a">
+   <img src="10a.png" height="280" alt="Step 10a">
 
 2. *Optional.* If you are planning to use the Raspi camera or you have *hooked jumpers*, you will have to do this. Be warned that this step is **irreversible**:
    1. Remove the header from the end of the UBEC.
    2. Insert the power wires into the USB-C female screw terminal, as shown in the diagram.
 
-   <img src="9b.png" height="280" alt="Step 10b">
+   <img src="10b.png" height="280" alt="Step 10b">
 
 3. Solder the header pins onto the LCD board's right side. *(You may skip this step if you are using hooked jumpers.)*
 
-   <img src="9c.png" height="280" alt="Step 10c">
+   <img src="10c.png" height="280" alt="Step 10c">
 
 ---
 
 ## Step 11 — Mounting the Electronics
 
-*Todo — parts table and assembly instructions.*
+
+| Part | Qty | Notes |
+| ---- | --- | ----- |
+| LCD (ESP32-S3) | 1 | From Step 9 |
+| ESP32 Mount | 1 | [ESP32 Mount.stl](../STL/KiloChassis/Base%20Components/ESP32%20Mount.stl) |
+| M2 × 6 mm screw | 4 | From [sourcing table](../README.md#sourcing-parts) |
+| Rear base | 1 | From Step 3 |
+| ESP32 bolt | 1 | [ESP32 Bolt.stl](../STL/KiloChassis/Bolts/ESP32%20Bolt.stl) |
+| Bus adapter | 1 | [Bus Adapter Bracket.stl](../STL/KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket.stl) |
+| Bus adapter clamping foot | 2 | [Bus Adapter Clamping Foot.stl](../STL/KiloChassis/Bus%20Adapter/Bus%20Adapter%20Clamping%20Foot.stl) |
+| Bus adapter clamp bolt | 2 | [Bus Adapter Clamp Bolt.stl](../STL/KiloChassis/Bolts/Bus%20Adapter%20Clamp%20Bolt.stl) |
+| Bus adapter bracket top | 1 | [Bus Adapter Bracket Top.stl](../STL/KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Top.stl) |
+| Bus adapter bracket bottom | 1 | [Bus Adapter Bracket Bottom.stl](../STL/KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Bottom.stl) |
+| SO101 Driver board | 1 | From SO101 follower arm |
+| Bus adapter bracket retainer | 1 | [Bus Adapter Bracket Retainer.stl](../STL/KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Retainer.stl) |
+| Bus adapter retainer bolt | 1 | [Bus Adapter Retainer Bolt.stl](../STL/KiloChassis/Bolts/Bus%20Adapter%20Retainer%20Bolt.stl) |
+
+
+**Assembly**
+
+1. Place the **LCD** onto the **ESP32 Mount** and insert **four M2×6 mm** screws.
+
+   <img src="11a.png" height="280" alt="Step 11a">
+
+2. Slide the **ESP32 Mount** onto the **rear base** and secure with the **ESP32 bolt**.
+
+   <img src="11b.png" height="280" alt="Step 11b">
+
+3. Secure the **clamp feet** to the **bus adapter** with the **bus adapter clamp bolt**.
+
+   <img src="11c.png" height="280" alt="Step 11c">
+
+4. Clamp the **top** and **bottom bus adapter brackets** onto the **SO101 Driver board**.
+
+   <img src="11d.png" height="280" alt="Step 11d">
+
+5. Insert the **top** and **bottom bus adapter brackets** into the **bus adapter**, slide on the **bus adapter bracket retainer**, and secure with the **bus adapter retainer bolt**.
+
+   <img src="11e.png" height="280" alt="Step 11e">
+
+6. Slide the **bus adapter** into the back of the **SO101 arm**.
 
 ---
 
 ## Step 12 — Wiring the arm UART and power
 
-1. Attach the jumper headers (or hooks) to the LCB board's right side (diagram A), and then wire them to the driver board (diagram B).
+1. Attach the jumper headers (or hooks) to the LCB board's right side (diagram A), and then wire them to the SO101 Driver board (diagram B).
 2. LCD connection options:
    1. **With Raspi camera** — Use a USB-C → µ-USB cable from the UBEC to the Raspi PWR. Use a µ-USB → USB-C cable from Raspi USB to the LCD board. *(See [Raspi camera attachment *(optional)*](#raspi-camera-attachment-optional) for camera assembly.)*
    2. **No Raspi camera, UBEC USB-C** — Use a USB-C to USB-C cable from the UBEC to the LCD board.
    3. **No Raspi camera, UBEC header** — Plug the header into the right side of the LCD board (as shown).
-3. Plug the barrel connector into the driver board.
+3. Plug the barrel connector into the SO101 Driver board.
 4. Insert the 7.4 V battery into the battery cage and secure it with the spring-loaded panel.
 
 ---
@@ -325,10 +373,10 @@ More Pi details: [raspi/README.md](../raspi/README.md).
 | 5 | Traction wheel bearing | [5a.png](5a.png) · [5b.png](5b.png) · [5c.png](5c.png) |
 | 6 | Front wheel assembly | [6a.png](6a.png) · [6b.png](6b.png) · [6d.png](6d.png) |
 | 7 | Mount SO101 follower arm | [7a.png](7a.png) · [7b.png](7b.png) · [7c.png](7c.png) |
-| 8 | Configure left/right traction motor IDs (driver board, jumpers B→A) | — |
-| 9 | pip install, flash ESP32-S3 firmware | [esp32s3lcd.png](esp32s3lcd.png) |
-| 10 | Prepare cables and LCD header pins | [9a.png](9a.png) · [9b.png](9b.png) · [9c.png](9c.png) |
-| 11 | Mounting the Electronics | — |
+| 8 | Configure left/right traction motor IDs (SO101 Driver board, jumpers B→A) | — |
+| 9 | Install SOBle and flash firmware | [esp32s3lcd.png](esp32s3lcd.png) |
+| 10 | Prepare cables and LCD header pins | [10a.png](10a.png) · [10b.png](10b.png) · [10c.png](10c.png) |
+| 11 | Mounting the Electronics | [11a.png](11a.png) · [11b.png](11b.png) · [11c.png](11c.png) · [11d.png](11d.png) · [11e.png](11e.png) |
 | 12 | Wire arm UART, UBEC, and LCD power | — |
 | 13 | Power on, run `viz-apriltags.py` | — |
 | — | *Optional:* Raspi camera + AprilTag service | [CamMount.png](CamMount.png) |
