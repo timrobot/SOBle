@@ -1,6 +1,6 @@
 [Unit]
 Description=SO101 AprilTag stream to ESP32 (detect_atags.py)
-Documentation=file://@REPO_DIR@/assembly/README.md
+Documentation=https://github.com/timrobot/SOBle/wiki/Assembly
 After=graphical-session.target
 PartOf=graphical-session.target
 

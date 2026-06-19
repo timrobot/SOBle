@@ -70,7 +70,7 @@ The **SO101 follower arm** (Feetech servos and its own controller) is not includ
 
 If you still need arm servos, order the two drive **STS3215** units from the table at the same time as the arm servos to save on shipping.
 
-Once you have printed all your parts and acquired the electronics, follow the instructions in [assembly/](assembly/).
+Once you have printed all your parts and acquired the electronics, follow the [assembly guide](https://github.com/timrobot/SOBle/wiki/Assembly).
 
 ---
 
