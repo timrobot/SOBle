@@ -172,7 +172,7 @@ git clone https://github.com/timrobot/SOBle.git && cd SOBle/examples
 python lead-follow.py
 ```
 
-Leader arm on USB; robot BLE name `Capybara`; joint mapping in `examples/angular_config.json`.
+Leader arm on USB; robot BLE name `Capybara`; joint mapping in `examples/config.json`.
 
 ---
 

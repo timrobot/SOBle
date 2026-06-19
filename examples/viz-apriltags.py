@@ -160,8 +160,8 @@ def main() -> int:
     p.add_argument(
         "--config", "-c",
         type=Path,
-        default=Path(__file__).resolve().parent / "angular_config.json",
-        help="angular_config.json (default: examples/angular_config.json)",
+        default=Path(__file__).resolve().parent / "config.json",
+        help="Leader/follower joint limits JSON (default: examples/config.json)",
     )
     p.add_argument(
         "--leader_port",

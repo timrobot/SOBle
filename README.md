@@ -78,7 +78,7 @@ There are a couple of examples to help you get started on your laptop if you jus
 | -------------------------------- | ------------------------------------------- |
 | [`examples/lead-follow.py`](examples/lead-follow.py)        | Leader → follower joint mirror; wheels at 0 |
 | [`examples/viz-apriltags.py`](examples/viz-apriltags.py)      | WASD drive, leader mirror, tag overlay      |
-| [`examples/open-camera-stream.py`](examples/open-camera-stream.py) | RTP camera preview (`cv2`)                  |
+| [`examples/open-camera-stream.py`](examples/open-camera-stream.py) | View camera stream over WiFi                |
 
 
 AprilTag overlays need the robot’s Pi camera running tag detection and forwarding over BLE (separate Pi setup on the robot).
