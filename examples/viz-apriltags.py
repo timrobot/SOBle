@@ -2,7 +2,6 @@
 """BLE teleop with WASD wheels, leader mirror, and AprilTag pygame overlay."""
 
 import argparse
-import threading
 from pathlib import Path
 
 from soble import SO101Leader, SO101Platform
@@ -98,63 +97,6 @@ def draw_reconstructed_tags(
             pygame.draw.line(surface, (255, 255, 255), pts[i], pts[(i + 1) % 4], 2)
 
 
-def pygame_loop(
-    running: threading.Event,
-    leader: SO101Leader,
-    platform: SO101Platform,
-) -> None:
-    pygame.init()
-    pygame.display.set_caption("BLE teleop — WASD drive | ESC or Q to quit")
-    hud_height = 32
-    screen = pygame.display.set_mode((FRAME_W, FRAME_H + hud_height))
-    font = pygame.font.Font(None, 28)
-    clock = pygame.time.Clock()
-    view = pygame.Surface((FRAME_W, FRAME_H))
-
-    while running.is_set():
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running.clear()
-            elif event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_ESCAPE, pygame.K_q):
-                    running.clear()
-
-        keys = pygame.key.get_pressed()
-        fwd = (1 if keys[pygame.K_w] else 0) - (1 if keys[pygame.K_s] else 0)
-        yaw = (1 if keys[pygame.K_d] else 0) - (1 if keys[pygame.K_a] else 0)
-        left = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE + fwd * MOTOR_SPEED_SCALE))))
-        right = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE - fwd * MOTOR_SPEED_SCALE))))
-
-        platform.drive(left, right)
-        positions = leader.getMappedPositions()
-        platform.setArmPositions(positions)
-
-        tags_viz = platform.detectApriltags()
-        notify_age = platform.last_notify_age_s()
-
-        view.fill((16, 16, 20))
-        if tags_viz:
-            draw_reconstructed_tags(view, tags_viz)
-
-        rx = (
-            f"last_rx {notify_age:0.2f}s ago"
-            if notify_age is not None
-            else "waiting for notify..."
-        )
-        status = f"L={left:4d} R={right:4d}  {rx}"
-        status += "  arm=following" if positions else "  arm=off (waiting for leader)"
-        if tags_viz:
-            status += f"  tags={len(tags_viz)}"
-
-        screen.fill((30, 30, 30))
-        screen.blit(view, (0, 0))
-        screen.blit(font.render(status, True, (220, 220, 220)), (8, FRAME_H + 8))
-        pygame.display.flip()
-        clock.tick(60)
-
-    pygame.quit()
-
-
 def main() -> int:
     p = argparse.ArgumentParser(description="BLE teleop: leader USB + SO101 follower")
     p.add_argument(
@@ -174,17 +116,62 @@ def main() -> int:
 
     print(f"Config: {args.config}")
 
-    running = threading.Event()
-    running.set()
-
     leader = SO101Leader(args.leader_port)
     leader.load_config(args.config)
     platform = SO101Platform(args.name)
 
+    pygame.init()
+    pygame.display.set_caption("BLE teleop — WASD drive | ESC or Q to quit")
+    hud_height = 32
+    screen = pygame.display.set_mode((FRAME_W, FRAME_H + hud_height))
+    font = pygame.font.Font(None, 28)
+    clock = pygame.time.Clock()
+    view = pygame.Surface((FRAME_W, FRAME_H))
+
+    running = True
     try:
-        pygame_loop(running, leader, platform)
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                        running = False
+
+            keys = pygame.key.get_pressed()
+            fwd = (1 if keys[pygame.K_w] else 0) - (1 if keys[pygame.K_s] else 0)
+            yaw = (1 if keys[pygame.K_d] else 0) - (1 if keys[pygame.K_a] else 0)
+            left = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE + fwd * MOTOR_SPEED_SCALE))))
+            right = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE - fwd * MOTOR_SPEED_SCALE))))
+
+            platform.drive(left, right)
+            positions = leader.getMappedPositions()
+            platform.setArmPositions(positions)
+
+            tags_viz = platform.detectApriltags()
+            notify_age = platform.last_notify_age_s()
+
+            view.fill((16, 16, 20))
+            if tags_viz:
+                draw_reconstructed_tags(view, tags_viz)
+
+            rx = (
+                f"last_rx {notify_age:0.2f}s ago"
+                if notify_age is not None
+                else "waiting for notify..."
+            )
+            status = f"L={left:4d} R={right:4d}  {rx}"
+            status += "  arm=following" if positions else "  arm=off (waiting for leader)"
+            if tags_viz:
+                status += f"  tags={len(tags_viz)}"
+
+            screen.fill((30, 30, 30))
+            screen.blit(view, (0, 0))
+            screen.blit(font.render(status, True, (220, 220, 220)), (8, FRAME_H + 8))
+            pygame.display.flip()
+            clock.tick(60)
     finally:
-        running.clear()
+        pygame.quit()
 
     return 0
 

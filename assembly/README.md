@@ -310,7 +310,12 @@ If the board is already on the robot, **do not power the robot**. The SO101 Driv
 
 ## Step 12 — Wiring the arm UART and power
 
-1. Attach the jumper headers (or hooks) to the LCB board's right side (diagram A), and then wire them to the SO101 Driver board (diagram B).
+1. Attach the jumper headers (or hooks) to the LCB board's right side (**Diagram A**), and then wire them to the SO101 Driver board (**Diagram B**).
+
+   <img src="../media/UART%20Wiring.png" height="280" alt="Diagram A — UART wiring">
+
+   <img src="../media/Driver%20Wiring.png" height="280" alt="Diagram B — driver wiring">
+
 2. LCD connection options:
    1. **With Raspi camera** — Use a USB-C → µ-USB cable from the UBEC to the Raspi PWR. Use a µ-USB → USB-C cable from Raspi USB to the LCD board. *(See [Raspi camera attachment *(optional)*](#raspi-camera-attachment-optional) for camera assembly.)*
    2. **No Raspi camera, UBEC USB-C** — Use a USB-C to USB-C cable from the UBEC to the LCD board.
@@ -377,7 +382,7 @@ If you plan to add the **Raspi camera attachment**, print [`SO-ARM101_IMX708_wri
 | 9 | Install SOBle and flash firmware | [esp32s3lcd.png](../media/esp32s3lcd.png) |
 | 10 | Prepare cables and LCD header pins | [10a.png](../media/10a.png) · [10b.png](../media/10b.png) · [10c.png](../media/10c.png) |
 | 11 | Mounting the Electronics | [11a.png](../media/11a.png) · [11b.png](../media/11b.png) · [11c.png](../media/11c.png) · [11d.png](../media/11d.png) · [11e.png](../media/11e.png) |
-| 12 | Wire arm UART, UBEC, and LCD power | — |
+| 12 | Wire arm UART, UBEC, and LCD power | [UART Wiring.png](../media/UART%20Wiring.png) · [Driver Wiring.png](../media/Driver%20Wiring.png) |
 | 13 | Power on, run `viz-apriltags.py` | — |
 | — | *Optional:* Raspi camera + AprilTag service | [CamMount.png](../media/CamMount.png) |
 
