@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full Pi setup for detect_atags.py (see README.md) + systemd user autostart.
+# Full Pi setup for detect_atags.py (see assembly guide) + systemd user autostart.
 set -euo pipefail
 
 RASPI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

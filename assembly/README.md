@@ -239,7 +239,6 @@ If the board is already on the robot, **do not power the robot**. The SO101 Driv
    ./patches/apply.sh
    ```
 
-   See [esp32/README.md](../esp32/README.md) for details.
 5. On the port, select the **ESP32-S3 Dev Module** board type, click on the connected serial port, and upload the sketch. It should take around one minute.
 6. Unplug the USB-C cable from the LCD board.
 
@@ -358,8 +357,6 @@ If you plan to add the **Raspi camera attachment**, print [`SO-ARM101_IMX708_wri
    ```
 
    (from [`SOBle/raspi/`](../raspi/)). Then **shut the Pi down**.
-
-More Pi details: [raspi/README.md](../raspi/README.md).
 
 *Optional:* Display an AprilTag such as [this tag16h5 example](https://berndpfrommer.github.io/tagslam_web/media/tag_16h5.png) on your phone — with the Raspi camera attached, you should see the tag detected in the pygame window.
 
