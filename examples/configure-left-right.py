@@ -2,8 +2,6 @@ import time
 import serial
 import argparse
 
-# --- CONFIGURATION ---
-# PORT: Update this to match your USB-to-RS485/TTL adapter (e.g., 'COM3' on Windows or '/dev/ttyUSB0' on Linux)
 BAUDRATE = 1000000  # FeeTech factory default is usually 1,000,000 or 115,200
 CURRENT_ID = 254    # Factory default ID is usually 1 (or use 254 as a broadcast ID if only ONE motor is connected)
 
@@ -57,7 +55,7 @@ def change_motor_id(comport, current_id, target_id):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Configure STS motor ID")
-    p.add_argument("--comport", "-c", help="COM port of the motor", default="/dev/ttyACM0")
+    p.add_argument("--comport", "-c", help="Serial port", default="/dev/tty.usbmodem575E0032081")
     args = p.parse_args()
 
     print("Plug in the left motor and press enter to continue")

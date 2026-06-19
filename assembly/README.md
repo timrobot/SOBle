@@ -186,57 +186,79 @@ Build the follower arm per the official [LeRobot SO-101 assembly guide](https://
 
 ---
 
-## Step 8 — Download SOBle and flash firmware
+## Step 8 — Configuring left and right motors
 
-<img src="esp32s3lcd.png" height="280" alt="ESP32-S3 LCD board">
+The two **Feetech STS3215** traction-wheel servos ship with the factory ID. Each must be set to **ID 7 (left)** and **ID 8 (right)** before the robot is wired up. Use the **driver board** (not the LCD board) and keep the **two jumpers on B** until the end of this section.
 
-If the board is already on the robot, **do not power the robot**. The driver board may be damaged if the robot is powered without a shared ground.
-
-1. **Get the repo** (needed for the Arduino sketch and examples):
+1. **Get the repo** (needed for `configure-left-right.py` and the rest of the build):
 
    ```bash
    git clone https://github.com/timrobot/SOBle.git
    cd SOBle
    ```
 
-2. **Install the Python package**:
+2. Plug a **USB-C** cable from your computer into the **driver board**.
+3. Plug in the **barrel jack** (UBEC / bench power — do not connect the battery yet if you are still on the bench).
+4. From the repo root, run the motor ID script (default port is macOS; Linux e.g. `/dev/ttyACM0`, Windows `COM3`):
+
+   ```bash
+   cd examples
+   python configure-left-right.py
+   ```
+
+   Use `-c` / `--comport` if your port differs, e.g. `python configure-left-right.py -c /dev/ttyACM0`.
+
+5. **Left motor only** — plug the left traction servo into the driver bus, press **Enter**, then **unplug** the left motor when the script says it succeeded.
+6. **Right motor only** — plug in the right traction servo, press **Enter**, then **unplug** the right motor when done.
+7. **Unplug all power** — disconnect the barrel jack and the USB-C cable from the driver board.
+8. Move the **two jumpers** on the driver board from **B** to **A**.
+
+---
+
+## Step 9 — Download SOBle and flash firmware
+
+<img src="esp32s3lcd.png" height="280" alt="ESP32-S3 LCD board">
+
+If the board is already on the robot, **do not power the robot**. The driver board may be damaged if the robot is powered without a shared ground.
+
+1. **Install the Python package** (if you have not already):
 
    ```bash
    pip install "soble @ git+https://github.com/timrobot/SOBle.git@master"
    ```
 
-3. Plug a **USB-C** cable from your computer to the LCD board.
-4. **Flash firmware** — Open `esp32/So101-Platform/` in the Arduino IDE (or your usual ESP32 toolchain). Add the **esp32** boards library from the boards manager.
-5. On the port, select the **ESP32-S3 Dev Module** board type, click on the connected serial port, and upload the sketch. It should take around one minute.
-6. Unplug the USB-C cable from the LCD board.
+2. Plug a **USB-C** cable from your computer to the **LCD board**.
+3. **Flash firmware** — Open `esp32/So101-Platform/` in the Arduino IDE (or your usual ESP32 toolchain). Add the **esp32** boards library from the boards manager.
+4. On the port, select the **ESP32-S3 Dev Module** board type, click on the connected serial port, and upload the sketch. It should take around one minute.
+5. Unplug the USB-C cable from the LCD board.
 
 ---
 
-## Step 9 — Preparing the cables and LCD pins
+## Step 10 — Preparing the cables and LCD pins
 
 1. Insert the barrel connector and UBEC power wires into the XT60 female screw terminal, as shown in the diagram.
 
-   <img src="9a.png" height="280" alt="Step 9a">
+   <img src="9a.png" height="280" alt="Step 10a">
 
 2. *Optional.* If you are planning to use the Raspi camera or you have *hooked jumpers*, you will have to do this. Be warned that this step is **irreversible**:
    1. Remove the header from the end of the UBEC.
    2. Insert the power wires into the USB-C female screw terminal, as shown in the diagram.
 
-   <img src="9b.png" height="280" alt="Step 9b">
+   <img src="9b.png" height="280" alt="Step 10b">
 
 3. Solder the header pins onto the LCD board's right side. *(You may skip this step if you are using hooked jumpers.)*
 
-   <img src="9c.png" height="280" alt="Step 9c">
+   <img src="9c.png" height="280" alt="Step 10c">
 
 ---
 
-## Step 10 — Mounting the Electronics
+## Step 11 — Mounting the Electronics
 
 *Todo — parts table and assembly instructions.*
 
 ---
 
-## Step 11 — Wiring the arm UART and power
+## Step 12 — Wiring the arm UART and power
 
 1. Attach the jumper headers (or hooks) to the LCB board's right side (diagram A), and then wire them to the driver board (diagram B).
 2. LCD connection options:
@@ -248,7 +270,7 @@ If the board is already on the robot, **do not power the robot**. The driver boa
 
 ---
 
-## Step 12 — Powering up the robot
+## Step 13 — Powering up the robot
 
 > **WARNING:** When you start the example below, the **follower arm on the robot** will immediately engage to match the joint mapping in your config file. Keep hands clear of the arm and make sure it has room to move before running.
 
@@ -303,11 +325,12 @@ More Pi details: [raspi/README.md](../raspi/README.md).
 | 5 | Traction wheel bearing | [5a.png](5a.png) · [5b.png](5b.png) · [5c.png](5c.png) |
 | 6 | Front wheel assembly | [6a.png](6a.png) · [6b.png](6b.png) · [6d.png](6d.png) |
 | 7 | Mount SO101 follower arm | [7a.png](7a.png) · [7b.png](7b.png) · [7c.png](7c.png) |
-| 8 | Clone SOBle, pip install, flash ESP32-S3 firmware | [esp32s3lcd.png](esp32s3lcd.png) |
-| 9 | Prepare cables and LCD header pins | [9a.png](9a.png) · [9b.png](9b.png) · [9c.png](9c.png) |
-| 10 | Mounting the Electronics | — |
-| 11 | Wire arm UART, UBEC, and LCD power | — |
-| 12 | Power on, run `viz-apriltags.py` | — |
+| 8 | Configure left/right traction motor IDs (driver board, jumpers B→A) | — |
+| 9 | pip install, flash ESP32-S3 firmware | [esp32s3lcd.png](esp32s3lcd.png) |
+| 10 | Prepare cables and LCD header pins | [9a.png](9a.png) · [9b.png](9b.png) · [9c.png](9c.png) |
+| 11 | Mounting the Electronics | — |
+| 12 | Wire arm UART, UBEC, and LCD power | — |
+| 13 | Power on, run `viz-apriltags.py` | — |
 | — | *Optional:* Raspi camera + AprilTag service | [CamMount.png](CamMount.png) |
 
 If a printed part name in your slicer folder differs from the labels above, match by shape to the step image.

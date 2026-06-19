@@ -163,7 +163,12 @@ def main() -> int:
         default=Path(__file__).resolve().parent / "angular_config.json",
         help="angular_config.json (default: examples/angular_config.json)",
     )
-    p.add_argument("--leader_port", "-p", default="/dev/ttyACM0", help="Leader serial port")
+    p.add_argument(
+        "--leader_port",
+        "-p",
+        default="/dev/tty.usbmodem575E0032081",
+        help="Leader serial port (Linux e.g. /dev/ttyACM0, Windows COM3)",
+    )
     p.add_argument("--name", "-n", default="Capybara", help="Robot BLE name")
     args = p.parse_args()
 
