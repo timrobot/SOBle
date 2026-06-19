@@ -6,8 +6,8 @@ if __name__ == "__main__":
     leader.load_config("config.json")
     platform = SO101Platform("Capybara", log_state=True)
 
-    platform.setLeftRightMotors(0, 0)
+    platform.drive(0, 0)
 
     while True:
-        positions = leader.getArmPositions()
+        positions = leader.getMappedPositions()
         platform.setArmPositions(positions)

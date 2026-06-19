@@ -212,9 +212,9 @@ The two **Feetech STS3215** traction-wheel servos ship with the factory ID. Each
 6. **Right motor only** — plug in the right traction servo, press **Enter**, then **unplug** the right motor when done.
 7. **Unplug all power** — disconnect the barrel jack and the USB-C cable from the SO101 Driver board.
 8. Move the **two jumpers** on the SO101 Driver board from **B** to **A**.
-9. Unplug **servo 2** to **servo 1**. Wire **servo 2** to **servo 8**.
-10. Wire **servo 8** to **servo 7**.
-11. Wire **servo 7** to **servo 1**.
+9. Wire **J2** (servo 2) to the **left traction motor**.
+10. Wire the **left traction motor** to the **right traction motor**.
+11. Wire the **right traction motor** to **J1** (servo 1).
 
 ---
 
@@ -224,7 +224,7 @@ The two **Feetech STS3215** traction-wheel servos ship with the factory ID. Each
 
 If the board is already on the robot, **do not power the robot**. The SO101 Driver board may be damaged if the robot is powered without a shared ground.
 
-1. **Install the Python package** (if you have not already):
+1. **Install the Python package** on your laptop (if you have not already):
 
    ```bash
    pip install "soble @ git+https://github.com/timrobot/SOBle.git@master"

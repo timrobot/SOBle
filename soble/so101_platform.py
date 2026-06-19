@@ -725,7 +725,7 @@ class SO101Platform:
                 return None
             return time.monotonic() - float(self._last_notify.value)
 
-    def getEncoders(self) -> tuple[int, int]:
+    def wheelEncoders(self) -> tuple[int, int]:
         with self._lock:
             return int(self._enc[0]), int(self._enc[1])
 
@@ -736,7 +736,7 @@ class SO101Platform:
                 return []
             return [int(self._arm_raw[i]) for i in range(ARM_JOINT_COUNT)]
 
-    def getIMUQuaternion(self) -> tuple[float, float, float, float]:
+    def imuQuaternion(self) -> tuple[float, float, float, float]:
         """Unit quaternion (w, x, y, z)."""
         with self._lock:
             return (
@@ -746,21 +746,21 @@ class SO101Platform:
                 float(self._quat[3]),
             )
 
-    def getIMURPH(self) -> tuple[float, float, float]:
+    def imuRotation(self) -> tuple[float, float, float]:
         """Roll, pitch, heading in degrees (from onboard Madgwick quaternion)."""
-        return _quat_to_rph_deg(*self.getIMUQuaternion())
+        return _quat_to_rph_deg(*self.imuQuaternion())
 
-    def getRaspiAlive(self) -> bool:
+    def raspiAlive(self) -> bool:
         """True if ESP32 has received serial from the Pi recently."""
         with self._lock:
             return bool(self._raspi.value)
 
-    def getWifiConnected(self) -> bool:
+    def wifiOnline(self) -> bool:
         """True if the Pi reported WiFi connected (serial status byte bit 7 / BLE ntags bit 6)."""
         with self._lock:
             return bool(self._wifi.value)
 
-    def getApriltagTags(
+    def detectApriltags(
         self,
         estimate_tag_pose=False,
         camera_params=(940.48, 940.48, 640, 360),
@@ -819,7 +819,7 @@ class SO101Platform:
                 self._arm_packed[i] = byte
             self._arm_positions_valid.value = True
 
-    def setLeftRightMotors(self, left: int, right: int) -> None:
+    def drive(self, left: int, right: int) -> None:
         with self._lock:
             self._left_cmd.value = max(-125, min(125, int(left)))
             self._right_cmd.value = max(-125, min(125, int(right)))
@@ -929,7 +929,7 @@ class SO101Platform:
         Returns the host IP sent to the Pi.
         """
         deadline = time.monotonic() + max(0.0, wait_wifi_s)
-        while not self.getWifiConnected():
+        while not self.wifiOnline():
             if not self.running:
                 raise RuntimeError("BLE worker not running")
             if time.monotonic() >= deadline:

@@ -130,21 +130,32 @@ def _set_arm_torque(ser: serial.Serial, enabled: bool) -> None:
     ser.flush()
 
 
+def _map_leader_to_follower_raws(
+    leader_raws: list[int],
+    leader_limits: list[JointLimits],
+    follower_limits: list[JointLimits],
+) -> list[int]:
+    mapped: list[int] = []
+    for i, raw in enumerate(leader_raws):
+        norm = _SO101LeaderReader._normalize_leader_angle(raw, leader_limits[i])
+        mapped.append(
+            _SO101LeaderReader._map_to_follower(
+                norm, leader_limits[i], follower_limits[i]
+            )
+        )
+    return mapped
+
+
 def _so101_leader_worker(
     port: str,
     baud: int,
-    leader_lim_tuples: list[tuple[int, int]],
-    follower_lim_tuples: list[tuple[int, int]],
-    follower_out: mp.Array,
+    leader_out: mp.Array,
     valid: mp.Value,
     arm_disabled: mp.Value,
     stop: mp.Event,
     poll_interval_s: float,
 ) -> None:
-    reader = _SO101LeaderReader(
-        _limits_from_tuples(leader_lim_tuples),
-        _limits_from_tuples(follower_lim_tuples),
-    )
+    reader = _SO101LeaderReader([], [])
 
     try:
         ser = serial.Serial(port, baud, timeout=0.08)
@@ -165,11 +176,10 @@ def _so101_leader_worker(
                 torque_engaged = want_engaged
 
             leader_raw = reader.sync_read(ser)
-            follower_raws = reader.compute_follower_raws(leader_raw)
-            if follower_raws is not None:
+            if len(leader_raw) == ARM_JOINT_COUNT:
                 with valid.get_lock():
-                    for i, raw in enumerate(follower_raws):
-                        follower_out[i] = raw
+                    for i, m_id in enumerate(MOTOR_IDS):
+                        leader_out[i] = leader_raw[m_id]
                     valid.value = True
             time.sleep(poll_interval_s)
     except Exception as e:
@@ -251,21 +261,9 @@ class _SO101LeaderReader:
         mapped = (leader_angle - leader_lim.min_val) * ratio + follower_lim.min_val
         return int(round(mapped)) & 0x0FFF
 
-    def compute_follower_raws(self, leader_raw: dict[int, int]) -> list[int] | None:
-        raws: list[int] = []
-        for i, m_id in enumerate(MOTOR_IDS):
-            raw = leader_raw.get(m_id)
-            if raw is None:
-                return None
-            norm = self._normalize_leader_angle(raw, self._leader_limits[i])
-            raws.append(
-                self._map_to_follower(norm, self._leader_limits[i], self._follower_limits[i])
-            )
-        return raws
-
 
 class SO101Leader:
-    """Leader reader in a background process; parent polls via getArmPositions()."""
+    """Leader reader in a background process; parent polls via getArmPositions() / getMappedPositions()."""
 
     def __init__(
         self,
@@ -296,14 +294,13 @@ class SO101Leader:
             self._follower_limits = []
 
         self._lock = mp.Lock()
-        self._follower_raws = mp.Array("i", ARM_JOINT_COUNT)
+        self._leader_raws = mp.Array("i", ARM_JOINT_COUNT)
         self._valid = mp.Value("b", False)
         self._arm_disabled = mp.Value("b", True)  # backdrivable by default
-        self._stop = mp.Event()
+        self._stop_event = mp.Event()
         self._proc: mp.Process | None = None
 
-        if len(self._leader_limits) == ARM_JOINT_COUNT:
-            self.start()
+        self._start()
 
     @staticmethod
     def limits_from_config(cfg: dict) -> tuple[list[JointLimits], list[JointLimits]]:
@@ -324,30 +321,25 @@ class SO101Leader:
             )
 
     def load_config(self, path: str | Path) -> None:
-        """Load leader/follower joint limits from a JSON file (see README)."""
-        running = self._proc is not None and self._proc.is_alive()
-        if running:
-            self.stop()
-        self._apply_limits_from_path(path)
-        self.start()
+        """Load leader/follower joint limits from a JSON file (mapping only; serial keeps running)."""
+        with self._lock:
+            self._apply_limits_from_path(path)
 
-    def start(self) -> None:
-        """Start (or restart) the serial reader. Called automatically from ``__init__``."""
+    def _start(self) -> None:
+        """Start the serial reader (called from ``__init__``)."""
         if self._proc is not None and self._proc.is_alive():
             return
         self._closed = False
-        self._stop.clear()
+        self._stop_event.clear()
         self._proc = mp.Process(
             target=_so101_leader_worker,
             args=(
                 self._port,
                 self._baud,
-                _limits_to_tuples(self._leader_limits),
-                _limits_to_tuples(self._follower_limits),
-                self._follower_raws,
+                self._leader_raws,
                 self._valid,
                 self._arm_disabled,
-                self._stop,
+                self._stop_event,
                 self._poll_interval_s,
             ),
             daemon=True,
@@ -363,24 +355,38 @@ class SO101Leader:
             self._arm_disabled.value = parsed is None
 
     def getArmPositions(self) -> list[int]:
-        """Latest mapped follower joint raws (6 ints, J1..J6), or [] if none yet."""
+        """Latest leader joint raws (6 ints, J1..J6, 0..4095), or [] if none yet."""
         with self._lock:
             if not self._valid.value:
                 return []
-            return list(self._follower_raws[:])
+            return list(self._leader_raws[:])
 
-    def stop(self) -> None:
-        """Stop the serial reader. Called automatically from ``__del__``."""
+    def getMappedPositions(self) -> list[int]:
+        """Follower-mapped joint raws (6 ints, J1..J6), leader raws 1:1 if no config, or [] if not ready."""
+        with self._lock:
+            if not self._valid.value:
+                return []
+            leader_raws = list(self._leader_raws[:])
+            leader_limits = self._leader_limits
+            follower_limits = self._follower_limits
+        if len(leader_limits) != ARM_JOINT_COUNT:
+            return leader_raws
+        return _map_leader_to_follower_raws(
+            leader_raws, leader_limits, follower_limits
+        )
+
+    def _stop(self) -> None:
+        """Stop the serial reader (called from ``__del__``)."""
         if self._closed:
             return
         self._closed = True
-        self._stop.set()
+        self._stop_event.set()
         if self._proc is not None:
             self._proc.join(timeout=2.0)
             self._proc = None
 
     def __del__(self) -> None:
         try:
-            self.stop()
+            self._stop()
         except Exception:
             pass

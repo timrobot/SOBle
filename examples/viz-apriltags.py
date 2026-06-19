@@ -125,11 +125,11 @@ def pygame_loop(
         left = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE + fwd * MOTOR_SPEED_SCALE))))
         right = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE - fwd * MOTOR_SPEED_SCALE))))
 
-        platform.setLeftRightMotors(left, right)
-        positions = leader.getArmPositions()
+        platform.drive(left, right)
+        positions = leader.getMappedPositions()
         platform.setArmPositions(positions)
 
-        tags_viz = platform.getApriltagTags()
+        tags_viz = platform.detectApriltags()
         notify_age = platform.last_notify_age_s()
 
         view.fill((16, 16, 20))

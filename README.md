@@ -30,9 +30,14 @@ leader.load_config("config.json")
 
 platform = SO101Platform("Capybara")  # sub in the name of your robot/So101 Platform here
 
-positions = leader.getArmPositions()  # 6 ints, 0..4095
+positions = leader.getMappedPositions()  # 6 ints, 0..4095
 platform.setArmPositions(positions)
-platform.setLeftRightMotors(0, 0)
+platform.drive(0, 0)
+
+# if you have a raspi+camera attached, you can also detect apriltags
+detections = platform.detectApriltags(estimate_tag_pose=True)
+for tag_id, corners, R, t in detections:
+    print(f"[{tag_id}]: {corners} {R} {t}")
 ```
 
 ---
@@ -76,12 +81,12 @@ There are a couple of examples to help you get started on your laptop if you jus
 
 | Script                           | What it does                                |
 | -------------------------------- | ------------------------------------------- |
-| [`examples/lead-follow.py`](examples/lead-follow.py)        | Leader → follower joint mirror; wheels at 0 |
-| [`examples/viz-apriltags.py`](examples/viz-apriltags.py)      | WASD drive, leader mirror, tag overlay      |
+| [`examples/lead-follow.py`](examples/lead-follow.py)        | Send mapped leader positions → follower |
+| [`examples/viz-apriltags.py`](examples/viz-apriltags.py)      | Drive using WASD, mapped leader → follower, visualize tags on screen      |
 | [`examples/open-camera-stream.py`](examples/open-camera-stream.py) | View camera stream over WiFi                |
 
 
-AprilTag overlays need the robot’s Pi camera running tag detection and forwarding over BLE (separate Pi setup on the robot).
+AprilTag overlays need a raspi+camera *(optional)* to be added to the end of the arm and connected to the LCD+ESP32.
 
 ---
 
@@ -100,11 +105,11 @@ leader.load_config("config.json")  # or pass config_path= in the constructor
 
 | Method                                                                                           | Returns                                       | Notes                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SO101Leader.limits_from_config(cfg: dict)`                                                      | `tuple[list[JointLimits], list[JointLimits]]` | **SOBle:** `"leader"` / `"follower"` with **J1…J6** `[min, max]`. **Standard SO101:** `"so101_leader"` / `"so101_follower"` with `"joints"` → `min_limit` / `max_limit`. |
-| `SO101Leader(port, leader_limits=None, follower_limits=None, *, config_path=None, baud=1000000)` | —                                             | **`port` required**. Pass limits, `config_path`, or call `load_config()` before use.                                                                                       |
-| `load_config(path)`                                                                              | `None`                                        | Load limits from JSON in either format above; (re)starts serial reader.                                                                                                    |
-| `start()` / `stop()`                                                                             | `None`                                        | `start()` optional after `stop()`; `stop()` ends SYNC_READ loop.                                                                                                           |
-| `getArmPositions()`                                                                              | `list[int]`                                   | **6** follower-mapped joint raws **0 … 4095**, or **`[]`** if not ready.                                                                                                  |
+| `SO101Leader.limits_from_config(cfg: dict)`                                                      | `tuple[list[JointLimits], list[JointLimits]]` | **Standard SO101:** `"so101_leader"` / `"so101_follower"` with `"joints"` → `min_limit` / `max_limit`. **Minified:** `"leader"` / `"follower"` with **J1…J6** `[min, max]`. |
+| `SO101Leader(port, leader_limits=None, follower_limits=None, *, config_path=None, baud=1000000)` | —                                             | **`port` required**. Serial starts on init. Pass limits, `config_path`, or call `load_config()` for mapping.                                                                                       |
+| `load_config(path)`                                                                              | `None`                                        | Set leader/follower limit mapping.                                                                                                    |
+| `getArmPositions()`                                                                              | `list[int]`                                   | **6** leader joint raws **0 … 4095**, or **`[]`** if not ready.                                                                                                             |
+| `getMappedPositions()`                                                                              | `list[int]`                                   | **6** follower-mapped raws **0 … 4095**, or leader raws **1:1** if no config; **`[]`** if not ready.                                                                                                  |
 | `setArmPositions(joints)`                                                                        | `None`                                        | Engage leader torque, or pass **`[]`** to release (backdrivable; default).                                                                                                 |
 
 `load_config` accepts either:
@@ -136,12 +141,12 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 
 | Method                            | Returns                             | Notes                                                                                         |
 | --------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| `getArmPositions()`               | `list[int]`                         | **6** raw encoder values **J1 … J6** from follower arm; **`[]`** if no state yet.             |
-| `getEncoders()`                   | `tuple[int, int]`                   | `(left, right)`, each **0 … 4095**.                                                           |
-| `getIMUQuaternion()`              | `tuple[float, float, float, float]` | Unit quaternion **(w, x, y, z)**.                                                             |
-| `getIMURPH()`                     | `tuple[float, float, float]`        | Roll, pitch, heading in **degrees**.                                                          |
-| `setLeftRightMotors(left, right)` | —                                   | Each **−125 … 125** (clamped).                                                                |
+| `drive(left, right)` | —                                   | Each **−125 … 125** (clamped).                                                                |
+| `wheelEncoders()`                   | `tuple[int, int]`                   | `(left, right)`, each **0 … 4095**.                                                           |
 | `setArmPositions(joints)`         | —                                   | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. Pass **`[]`** to disengage arm. |
+| `getArmPositions()`               | `list[int]`                         | **6** raw encoder values **J1 … J6** from follower arm; **`[]`** if no state yet.             |
+| `imuRotation()`                     | `tuple[float, float, float]`        | IMU roll, pitch, heading in **degrees**.                                                          |
+| `imuQuaternion()`              | `tuple[float, float, float, float]` | IMU unit quaternion **(w, x, y, z)**.                                                             |
 
 
 ### Camera Commands
@@ -149,11 +154,11 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 
 | Method                                                             | Returns                                       | Notes                                                                                                           |
 | ------------------------------------------------------------------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `getRaspiAlive()`                                                  | `bool`                                        | Pi serial seen recently.                                                                                        |
-| `getApriltagTags()`                                                | `list[tuple[int, list[tuple[float, float]]]]` | Tag id plus four corner `(x, y)` pairs (**lb, rb, rt, lt**). Returns **`[]`** if no state yet or no tags in view. |
-| `getWifiConnected()`                                               | `bool`                                        | Pi WiFi up (`True` if online). Configure WiFi on the Pi manually.                                              |
+| `raspiAlive()`                                                  | `bool`                                        | Pi serial seen recently.                                                                                        |
+| `wifiOnline()`                                               | `bool`                                        | Pi WiFi up (`True` if online). Configure WiFi on the Pi manually.                                              |
+| `detectApriltags(estimate_tag_pose=False, camera_params=..., tag_size=3)` | `list` | Tag id plus four corner `(x, y)` pairs (**lb, rb, rt, lt**). Returns **`[]`** if no state yet or no tags in view. Pass `estimate_tag_pose=True` for `(tag_id, corners, R, tvec)` per tag. |
 | `setTagFamily(family)`                                             | —                                             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'`.                                                                      |
-| `videoCapture(*, host=None, port=5000, wait_wifi_s=15, callback=None)` | `str` (host IP)                               | Start Pi RTP stream; read frames with `imread()`. Optional per-frame `callback`. Waits for Pi WiFi over BLE.   |
+| `videoCapture(callback=None, host=None, port=5000, wait_wifi_s=15)` | `str` (host IP)                               | Start Pi RTP stream; read frames with `imread()`. Optional per-frame `callback`. Waits for Pi WiFi over BLE.   |
 | `imread()`                                                         | `np.ndarray` or `None`                        | Latest **1280×720** BGR frame, or `None` if none yet.                                                           |
 
 
@@ -196,7 +201,7 @@ Full script: `examples/open-camera-stream.py`.
 **Example** — two tag16h5 tags in view:
 
 ```python
->>> platform.getApriltagTags()
+>>> platform.detectApriltags()
 [
     (0, [
         (612.4, 388.2),   # lb
