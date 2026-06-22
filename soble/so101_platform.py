@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import math
 import multiprocessing as mp
 import platform
 import socket
@@ -288,17 +287,17 @@ def _unpack_robot_state(data: bytes) -> dict | None:
 
 def _quat_to_rph_deg(qw: float, qx: float, qy: float, qz: float) -> tuple[float, float, float]:
     """Roll, pitch, heading (deg) — same convention as So101-Platform.ino Madgwick output."""
-    roll = math.degrees(
-        math.atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
-    )
+    roll = float(np.degrees(
+        np.arctan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
+    ))
     sinp = 2.0 * (qw * qy - qz * qx)
     if abs(sinp) >= 1.0:
-        pitch = math.copysign(90.0, sinp)
+        pitch = float(np.copysign(90.0, sinp))
     else:
-        pitch = math.degrees(math.asin(sinp))
-    heading = math.degrees(
-        math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
-    )
+        pitch = float(np.degrees(np.arcsin(sinp)))
+    heading = float(np.degrees(
+        np.arctan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+    ))
     return roll, pitch, heading
 
 
