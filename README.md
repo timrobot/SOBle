@@ -16,6 +16,10 @@ Included is a provided python package for host-side control and teleop of the SO
 pip install "soble @ git+https://github.com/timrobot/SOBle.git@master"
 ```
 
+### Standalone 3D viewer (no Python install)
+
+Pre-built binaries for Windows, macOS, and Linux are produced by the [Build 3D Viewer](.github/workflows/build-viewer.yml) GitHub Actions workflow (manual trigger). To build locally, see [packaging/viewer/README.md](packaging/viewer/README.md).
+
 ---
 
 ## Quick usage
@@ -45,7 +49,6 @@ for tag_id, corners, R, t in detections:
 ## Sourcing parts
 
 The following table lists the electronics you will need to purchase in addition to the prints you will need to make in [STL/](STL/), which will require 1-2 rolls of 1KG of PLA. Note that ideally you will need to solder at least a little, but solderless [hooked jumper wires](https://www.amazon.com/dp/B0BJ627S1X) are available for those who prefer not to.
-
 
 | Part name                                                 | Qty | Unit Cost | Buy Link                                                                                                 |
 | --------------------------------------------------------- | --- | --------- | -------------------------------------------------------------------------------------------------------- |
@@ -158,7 +161,7 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 | `wifiOnline()`                                               | `bool`                                        | Pi WiFi up (`True` if online). Configure WiFi on the Pi manually.                                              |
 | `detectApriltags(estimate_tag_pose=False, camera_params=..., tag_size=3)` | `list` | Tag id plus four corner `(x, y)` pairs (**lb, rb, rt, lt**). Returns **`[]`** if no state yet or no tags in view. Pass `estimate_tag_pose=True` for `(tag_id, corners, R, tvec)` per tag. |
 | `setTagFamily(family)`                                             | —                                             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'`.                                                                      |
-| `videoCapture(callback=None, host=None, port=5000, wait_wifi_s=15)` | `str` (host IP)                               | Start Pi RTP stream; read frames with `imread()`. Optional per-frame `callback`. Waits for Pi WiFi over BLE.   |
+| `videoCapture(host=None, port=5000, wait_wifi_s=15)` | `str` (host IP)                               | Start Pi RTP stream; read frames with `imread()`. Waits for Pi WiFi over BLE.   |
 | `imread()`                                                         | `np.ndarray` or `None`                        | Latest **1280×720** BGR frame, or `None` if none yet.                                                           |
 
 

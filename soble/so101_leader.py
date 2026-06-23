@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import serial
 
-from soble.arm_joints import ARM_JOINT_COUNT, parse_arm_joints
+from soble.arm_joints import ARM_JOINT_COUNT, DEFAULT_RAW_LIMITS, parse_arm_joints, vector_map
 
 MOTOR_IDS = [1, 2, 3, 4, 5, 6]
 JOINT_KEYS = ["J1", "J2", "J3", "J4", "J5", "J6"]
@@ -130,20 +130,24 @@ def _set_arm_torque(ser: serial.Serial, enabled: bool) -> None:
     ser.flush()
 
 
-def _map_leader_to_follower_raws(
-    leader_raws: list[int],
-    leader_limits: list[JointLimits],
-    follower_limits: list[JointLimits],
-) -> list[int]:
-    mapped: list[int] = []
-    for i, raw in enumerate(leader_raws):
-        norm = _SO101LeaderReader._normalize_leader_angle(raw, leader_limits[i])
-        mapped.append(
-            _SO101LeaderReader._map_to_follower(
-                norm, leader_limits[i], follower_limits[i]
+def limits_to_array(limits: list[JointLimits]) -> np.ndarray:
+    """Joint raw endpoints as ``(N, 2)`` int32 — column 0 = min, column 1 = max."""
+    return np.array([[lim.min_val, lim.max_val] for lim in limits], dtype=np.int32)
+
+
+def _as_limits_array(limits: list[JointLimits] | np.ndarray) -> np.ndarray:
+    if isinstance(limits, np.ndarray):
+        arr = np.asarray(limits, dtype=np.int32)
+        if arr.shape != (ARM_JOINT_COUNT, 2):
+            raise ValueError(
+                f"limits array must have shape ({ARM_JOINT_COUNT}, 2), got {arr.shape}"
             )
+        return arr
+    if len(limits) != ARM_JOINT_COUNT:
+        raise ValueError(
+            f"expected {ARM_JOINT_COUNT} joint limits, got {len(limits)}"
         )
-    return mapped
+    return limits_to_array(limits)
 
 
 def _so101_leader_worker(
@@ -155,7 +159,7 @@ def _so101_leader_worker(
     stop: mp.Event,
     poll_interval_s: float,
 ) -> None:
-    reader = _SO101LeaderReader([], [])
+    reader = _SO101LeaderReader()
 
     try:
         ser = serial.Serial(port, baud, timeout=0.08)
@@ -191,15 +195,7 @@ def _so101_leader_worker(
 
 
 class _SO101LeaderReader:
-    """Serial SYNC_READ + angular mapping (runs only in the child process)."""
-
-    def __init__(
-        self,
-        leader_limits: list[JointLimits],
-        follower_limits: list[JointLimits],
-    ) -> None:
-        self._leader_limits = leader_limits
-        self._follower_limits = follower_limits
+    """Serial SYNC_READ (runs only in the child process)."""
 
     @staticmethod
     def _build_sync_read_packet() -> bytes:
@@ -242,25 +238,6 @@ class _SO101LeaderReader:
                 positions[m_id] = pos
         return positions
 
-    @staticmethod
-    def _normalize_leader_angle(raw: int, limits: JointLimits) -> int:
-        if raw < limits.min_val - BELOW_MIN_MARGIN:
-            raw += WRAP_OFFSET
-        return raw
-
-    @staticmethod
-    def _map_to_follower(
-        leader_angle: int,
-        leader_lim: JointLimits,
-        follower_lim: JointLimits,
-    ) -> int:
-        l_range = leader_lim.range
-        if l_range <= 0:
-            return follower_lim.min_val
-        ratio = follower_lim.range / l_range
-        mapped = (leader_angle - leader_lim.min_val) * ratio + follower_lim.min_val
-        return int(round(mapped)) & 0x0FFF
-
 
 class SO101Leader:
     """Leader reader in a background process; parent polls via getArmPositions() / getMappedPositions()."""
@@ -268,8 +245,8 @@ class SO101Leader:
     def __init__(
         self,
         port: str,
-        leader_limits: list[JointLimits] | None = None,
-        follower_limits: list[JointLimits] | None = None,
+        leader_limits: list[JointLimits] | np.ndarray | None = None,
+        follower_limits: list[JointLimits] | np.ndarray | None = None,
         *,
         config_path: str | Path | None = None,
         baud: int = DEFAULT_BAUD,
@@ -279,19 +256,18 @@ class SO101Leader:
         self._baud = baud
         self._poll_interval_s = poll_interval_s
         self._closed = False
+        self._leader_raw_limits = DEFAULT_RAW_LIMITS.copy()
+        self._follower_raw_limits = DEFAULT_RAW_LIMITS.copy()
 
         if config_path is not None:
             if leader_limits is not None or follower_limits is not None:
                 raise ValueError("pass config_path or explicit limits, not both")
             self._apply_limits_from_path(config_path)
         elif leader_limits is not None and follower_limits is not None:
-            self._leader_limits = leader_limits
-            self._follower_limits = follower_limits
+            self._leader_raw_limits = _as_limits_array(leader_limits)
+            self._follower_raw_limits = _as_limits_array(follower_limits)
         elif leader_limits is not None or follower_limits is not None:
             raise TypeError("leader_limits and follower_limits must both be provided")
-        else:
-            self._leader_limits = []
-            self._follower_limits = []
 
         self._lock = mp.Lock()
         self._leader_raws = mp.Array("i", ARM_JOINT_COUNT)
@@ -303,22 +279,27 @@ class SO101Leader:
         self._start()
 
     @staticmethod
-    def limits_from_config(cfg: dict) -> tuple[list[JointLimits], list[JointLimits]]:
-        """Build leader/follower limit lists from a config dict (see README)."""
+    def limits_from_config(cfg: dict) -> tuple[np.ndarray, np.ndarray]:
+        """Build leader/follower ``(N, 2)`` limit arrays from a config dict (see README)."""
         if "so101_leader" in cfg and "so101_follower" in cfg:
-            return _limits_from_so101_config(cfg)
-        if "leader" in cfg and "follower" in cfg:
-            return _limits_from_j1_config(cfg)
-        raise ValueError(
-            'config must include "leader"/"follower" (J1..J6) or '
-            '"so101_leader"/"so101_follower" (joints with min_limit/max_limit)'
-        )
+            leader, follower = _limits_from_so101_config(cfg)
+        elif "leader" in cfg and "follower" in cfg:
+            leader, follower = _limits_from_j1_config(cfg)
+        else:
+            raise ValueError(
+                'config must include "leader"/"follower" (J1..J6) or '
+                '"so101_leader"/"so101_follower" (joints with min_limit/max_limit)'
+            )
+        return limits_to_array(leader), limits_to_array(follower)
+
+    @classmethod
+    def limits_from_path(cls, path: str | Path) -> tuple[np.ndarray, np.ndarray]:
+        """Load leader/follower joint limits from JSON without opening serial."""
+        with Path(path).open(encoding="utf-8") as f:
+            return cls.limits_from_config(json.load(f))
 
     def _apply_limits_from_path(self, path: str | Path) -> None:
-        with Path(path).open(encoding="utf-8") as f:
-            self._leader_limits, self._follower_limits = self.limits_from_config(
-                json.load(f)
-            )
+        self._leader_raw_limits, self._follower_raw_limits = self.limits_from_path(path)
 
     def load_config(self, path: str | Path) -> None:
         """Load leader/follower joint limits from a JSON file (mapping only; serial keeps running)."""
@@ -362,18 +343,15 @@ class SO101Leader:
             return list(self._leader_raws[:])
 
     def getMappedPositions(self) -> list[int]:
-        """Follower-mapped joint raws (6 ints, J1..J6), leader raws 1:1 if no config, or [] if not ready."""
+        """Follower-mapped joint raws (6 ints, J1..J6), or [] if not ready."""
         with self._lock:
             if not self._valid.value:
                 return []
-            leader_raws = list(self._leader_raws[:])
-            leader_limits = self._leader_limits
-            follower_limits = self._follower_limits
-        if len(leader_limits) != ARM_JOINT_COUNT:
-            return leader_raws
-        return _map_leader_to_follower_raws(
-            leader_raws, leader_limits, follower_limits
+            leader_raws = np.asarray(self._leader_raws[:], dtype=np.float64)
+        mapped = vector_map(
+            leader_raws, self._leader_raw_limits, self._follower_raw_limits
         )
+        return (np.round(mapped).astype(int) & 0x0FFF).tolist()
 
     def _stop(self) -> None:
         """Stop the serial reader (called from ``__del__``)."""

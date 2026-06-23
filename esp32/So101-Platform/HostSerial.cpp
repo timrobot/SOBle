@@ -8,6 +8,18 @@
 #define TOHEX(x) ((x) > 9 ? (x) - 10 + 'a' : (x) + '0')
 #define FROMHEX(x) ((x) <= '9' ? (x) - '0' : ((x) >= 'a' ? (x) - 'a' + 10 : (x) - 'A' + 10) )
 
+// Pi heartbeats at 100 ms in stream mode; allow a few missed frames.
+static constexpr uint32_t kPiAliveTimeoutMs = 250;
+
+/// Drain UART RX without blocking (never call readBytes — it can wait on timeout).
+static int readAvailableNonBlocking(Stream &ser, char *buf, int readptr, int cap) {
+  while (ser.available() > 0 && readptr < cap - 1) {
+    buf[readptr++] = (char)ser.read();
+  }
+  buf[readptr] = '\0';
+  return readptr;
+}
+
 /// Wrapper for integer communication, sends byte arrays as b64
 /// Byte formats must be specified beforehand - this includes any calls for RPC or otherwise
 /// <param name="ser">the serial interface</param>
@@ -46,6 +58,7 @@ void HostSerial::begin(const int64_t baudrate, int rxPin, int txPin) {
   } else {
     static_cast<HardwareSerial &>(ser).begin(baudrate);
   }
+  static_cast<HardwareSerial &>(ser).setTimeout(0);
   #elif __AVR__
   static_cast<HardwareSerial &>(ser).begin(baudrate);
   #else
@@ -61,13 +74,15 @@ message_t *HostSerial::readMessage(void) {
   char *ptr = parsebuf, *delim;
 
   if (ser.available()) {
-    // ignore previous data, since we read until \n
-    // nbytes = ser.readBytesUntil('\n', readbuf, sizeof(SMAXBYTES));
-    nbytes = ser.readBytes(&readbuf[readptr], ser.available());
-    readptr += nbytes;
-    readbuf[readptr] = '\0';
+    readptr = readAvailableNonBlocking(ser, readbuf, readptr, (int)sizeof(readbuf));
+    // Floating RX with no Pi can accumulate garbage without '\n' — drop if full.
+    if (readptr >= (int)sizeof(readbuf) - 1) {
+      readptr = 0;
+      readbuf[0] = '\0';
+      return nullptr;
+    }
     if ((delim = strchr(readbuf, '\n')) == NULL) {
-      return nullptr; // no message found
+      return nullptr; // partial line, wait for more bytes
     }
     delim[0] = '\0'; // marker
     strcpy(parsebuf, readbuf);
@@ -102,7 +117,7 @@ message_t *HostSerial::readMessage(void) {
   }
 
   // safety turn off command
-  if ((msec - lastReadTime) >= 250) {
+  if ((msec - lastReadTime) >= kPiAliveTimeoutMs) {
     return STIMEOUT;
   } else if (nbytes == 0) {
     return nullptr;

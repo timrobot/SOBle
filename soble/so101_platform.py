@@ -1,4 +1,5 @@
-"""BLE interface to so101base.ino (RobotState notify + RobotCommand write)."""
+"""BLE interface to so101base.ino (RobotState notify + RobotCommand write).
+"""
 
 from __future__ import annotations
 
@@ -8,10 +9,7 @@ import multiprocessing as mp
 import platform
 import socket
 import struct
-import threading
 import time
-from collections.abc import Callable
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -21,8 +19,7 @@ from bleak.backends.device import BLEDevice
 from soble import camera_stream as host_camera_stream
 from soble.arm_joints import ARM_JOINT_COUNT, parse_arm_joints
 
-# Linux default fork + asyncio/BlueZ D-Bus breaks BLE notify delivery in a child;
-# spawn gives the BLE worker a clean process on Linux (fork breaks BlueZ notify delivery).
+# BLE worker must use spawn on Linux — fork inherits parent threads/state and breaks asyncio/BlueZ.
 MP_CTX = mp.get_context("spawn")
 
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331d914"
@@ -40,55 +37,6 @@ ARM_CENTER_RAW = 2048  # mid of 0..4095 — default when leader not connected
 STATE_LEN = 201
 
 
-async def _acquire_mtu_for_robot_char(client: BleakClient, char_uuid: str) -> None:
-    """Negotiate ATT MTU on the robot notify characteristic (BlueZ AcquireNotify)."""
-    backend = client._backend
-    _ = client.services
-    char = client.services.get_characteristic(char_uuid)
-    if char is None:
-        raise RuntimeError(f"GATT characteristic not found: {char_uuid}")
-
-    bus = getattr(backend, "_bus", None)
-    char_path = getattr(char, "path", None)
-    if bus is not None and char_path is not None and "notify" in char.properties:
-        try:
-            import os
-
-            from bleak.backends.bluezdbus.utils import assert_reply
-            from dbus_fast import Message
-
-            from bleak.backends.bluezdbus import defs
-
-            reply = await bus.call(
-                Message(
-                    destination=defs.BLUEZ_SERVICE,
-                    path=char_path,
-                    interface=defs.GATT_CHARACTERISTIC_INTERFACE,
-                    member="AcquireNotify",
-                    signature="a{sv}",
-                    body=[{}],
-                )
-            )
-            assert_reply(reply)
-            mtu = int(reply.body[1])
-            os.close(reply.unix_fds[0])
-            if hasattr(backend, "_mtu_size"):
-                backend._mtu_size = mtu
-            return
-        except Exception as exc:
-            print(
-                f"AcquireNotify on robot characteristic failed: "
-                f"{type(exc).__name__}: {exc!r}",
-                flush=True,
-            )
-
-    acquire = getattr(backend, "_acquire_mtu", None)
-    if acquire is not None:
-        await acquire()
-    elif hasattr(client, "exchange_mtu"):
-        await client.exchange_mtu(512)
-
-
 async def _prepare_ble_link(
     client: BleakClient,
     char_uuid: str = CHAR_UUID,
@@ -96,7 +44,20 @@ async def _prepare_ble_link(
     need_notify_len: int = STATE_LEN,
 ) -> None:
     """Negotiate ATT MTU for robot notifies; warn only if payload looks too small."""
-    await _acquire_mtu_for_robot_char(client, char_uuid)
+    _ = client.services
+    # BleakClient.exchange_mtu() is not implemented on the BlueZ backend (Linux).
+    # Use backend._acquire_mtu() instead — AcquireWrite or AcquireNotify via BlueZ,
+    # which sets _mtu_size so client.mtu_size is not the default 23.
+    backend = client._backend
+    acquire_mtu = getattr(backend, "_acquire_mtu", None)
+    if acquire_mtu is not None:
+        try:
+            await acquire_mtu()
+        except Exception as exc:
+            print(
+                f"MTU acquire skipped: {type(exc).__name__}: {exc!r}",
+                flush=True,
+            )
 
     char = client.services.get_characteristic(char_uuid)
     if char is None:
@@ -118,6 +79,11 @@ TAG_BLOB_LEN = MAX_TAGS * TAG_INFO_LEN
 TX_INTERVAL = 0.04  # 25 Hz — matches BLE_TX_INTERVAL on ESP32
 DEFAULT_RECONNECT_DELAY_S = 0.25
 STALE_NOTIFY_S = 0.3  # reconnect if no RobotState notify within this window
+
+
+def _gatt_write_with_response() -> bool:
+    """Use ATT write-with-response except on Linux, where it blocks BlueZ notify delivery."""
+    return platform.system() == "Windows" or platform.system() == "Darwin"
 
 # Must match raspi/detect_atags.py (origin 640,360 and * 25 packing)
 TAG_ORIGIN_X = 640.0
@@ -506,13 +472,14 @@ async def _ble_session(
                             payload = bytes(pending_ble[:n])
                             pending_ble_valid.value = False
                         else:
-                            with lock:
-                                torque_off = not bool(arm_positions_valid.value)
+                            torque_off = not bool(arm_positions_valid.value)
                             payload = _pack_robot_command(
                                 left, right, arm, arm_disabled=torque_off
                             )
                     assert len(payload) in (CMD_ACTUATOR_LEN, CMD_RASPI_LEN)
-                    await client.write_gatt_char(CHAR_UUID, payload, response=True)
+                    await client.write_gatt_char(
+                        CHAR_UUID, payload, response=_gatt_write_with_response()
+                    )
                     last_sent = time.monotonic()
                     continue
 
@@ -595,7 +562,9 @@ async def _ble_main(
         if disconnected:
             print("Disconnected.", flush=True)
 
-        _clear_state(got_state, last_notify, ntags, raspi, wifi, lock)
+        _clear_state(
+            got_state, last_notify, ntags, raspi, wifi, lock
+        )
         if stop.is_set():
             break
         print(f"Reconnecting in {reconnect_delay_s:.0f}s...", flush=True)
@@ -659,6 +628,7 @@ class SO101Platform:
         *,
         reconnect_delay_s: float = DEFAULT_RECONNECT_DELAY_S,
         log_state: bool = True,
+        autostart: bool = True,
     ) -> None:
         self._device_name = device_name
         self._reconnect_delay_s = reconnect_delay_s
@@ -698,21 +668,9 @@ class SO101Platform:
         self._frame_ready = MP_CTX.Event()
         self._frame_seq = MP_CTX.Value("Q", 0)
         self._frame_lock = MP_CTX.Lock()
-        self._stream_dispatch_stop = threading.Event()
-        self._stream_dispatch_thread: threading.Thread | None = None
-        self._on_frame_callback: Callable[[np.ndarray], None] | None = None
-        self._latest_frame_lock = threading.Lock()
-        self._latest_frame_buf = np.empty(
-            (
-                host_camera_stream.STREAM_HEIGHT,
-                host_camera_stream.STREAM_WIDTH,
-                host_camera_stream.STREAM_CHANNELS,
-            ),
-            dtype=np.uint8,
-        )
-        self._latest_frame_valid = False
 
-        self.start()
+        if autostart:
+            self.start()
 
     @property
     def running(self) -> bool:
@@ -837,13 +795,6 @@ class SO101Platform:
             self._pending_ble_valid.value = True
 
     def _stop_camera_stream_receiver(self) -> None:
-        self._stream_dispatch_stop.set()
-        if self._stream_dispatch_thread is not None:
-            self._stream_dispatch_thread.join(timeout=2.0)
-            self._stream_dispatch_thread = None
-        self._stream_dispatch_stop.clear()
-        self._on_frame_callback = None
-
         self._stream_stop.set()
         host_camera_stream.stop_receive_stream(self._stream_proc, self._stream_stop)
         self._stream_proc = None
@@ -853,47 +804,28 @@ class SO101Platform:
             self._frame_seq.value = 0
             self._frame_write_slot.value = 0
             self._frame_read_slot.value = 0
-        with self._latest_frame_lock:
-            self._latest_frame_valid = False
 
-    def _stream_frame_dispatch_loop(self) -> None:
-        last_seq = 0
+    def imread(self) -> np.ndarray | None:
+        """Return the latest BGR frame from the Pi camera stream (1280×720), or ``None`` if none yet."""
+        if self._stream_proc is None or not self._stream_proc.is_alive():
+            return None
+        if int(self._frame_seq.value) == 0:
+            return None
         shape = (
             host_camera_stream.STREAM_HEIGHT,
             host_camera_stream.STREAM_WIDTH,
             host_camera_stream.STREAM_CHANNELS,
         )
         nbytes = host_camera_stream.STREAM_FRAME_BYTES
-        while not self._stream_dispatch_stop.is_set():
-            if not self._frame_ready.wait(timeout=0.05):
-                continue
-            self._frame_ready.clear()
-            with self._frame_lock:
-                seq = int(self._frame_seq.value)
-                if seq <= last_seq:
-                    continue
-                last_seq = seq
-                slot = int(self._frame_read_slot.value) % host_camera_stream.STREAM_BUFFER_COUNT
-                offset = slot * nbytes
-                frame = np.frombuffer(
-                    self._frame_buf.get_obj(),
-                    dtype=np.uint8,
-                    offset=offset,
-                    count=nbytes,
-                ).reshape(shape)
-            with self._latest_frame_lock:
-                np.copyto(self._latest_frame_buf, frame)
-                self._latest_frame_valid = True
-            cb = self._on_frame_callback
-            if cb is not None:
-                cb(frame)
-
-    def imread(self) -> np.ndarray | None:
-        """Return the latest BGR frame from the Pi camera stream (1280×720), or ``None`` if none yet."""
-        with self._latest_frame_lock:
-            if not self._latest_frame_valid:
-                return None
-            return self._latest_frame_buf.copy()
+        with self._frame_lock:
+            slot = int(self._frame_read_slot.value) % host_camera_stream.STREAM_BUFFER_COUNT
+            offset = slot * nbytes
+            return np.frombuffer(
+                self._frame_buf.get_obj(),
+                dtype=np.uint8,
+                offset=offset,
+                count=nbytes,
+            ).reshape(shape).copy()
 
     def setTagFamily(self, family: str) -> None:
         """Forward tag family to the Pi ('tag16h5', 'tag25h9', 'tag36h11'). Stops host RTP receiver."""
@@ -910,7 +842,6 @@ class SO101Platform:
 
     def videoCapture(
         self,
-        callback: Callable[[np.ndarray], None] | None = None,
         *,
         host: str | None = None,
         port: int = 5000,
@@ -919,8 +850,6 @@ class SO101Platform:
         """Start Pi RTP camera stream (1280×720 BGR). Read frames with :meth:`imread`.
 
         Args:
-            callback: Optional; called on a background thread for each decoded frame.
-                Prefer :meth:`imread` on the main thread for OpenCV GUI work.
             host: Destination IP for the Pi RTP sender; default is this PC's LAN IP.
             port: UDP port (default 5000).
             wait_wifi_s: Seconds to wait for Pi WiFi status over BLE before failing.
@@ -942,7 +871,6 @@ class SO101Platform:
         if host is None:
             host = get_lan_ip()
 
-        self._on_frame_callback = callback
         self._stream_proc = host_camera_stream.run_receive_stream(
             port,
             self._frame_buf,
@@ -954,13 +882,6 @@ class SO101Platform:
             self._stream_stop,
             mp_context=MP_CTX,
         )
-        self._stream_dispatch_stop.clear()
-        self._stream_dispatch_thread = threading.Thread(
-            target=self._stream_frame_dispatch_loop,
-            name="so101-camera-frame-dispatch",
-            daemon=True,
-        )
-        self._stream_dispatch_thread.start()
 
         self._queue_ble_command(_pack_raspi_ble_command(CMD_STREAM, host, port))
         return host
@@ -1023,3 +944,75 @@ class SO101Platform:
             self.stop()
         except Exception:
             pass
+
+
+def _main_test() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="SO101Platform BLE test (multiprocess, cmd='0' @ 25 Hz)"
+    )
+    parser.add_argument("-n", "--name", default="Capybara")
+    parser.add_argument("-d", "--duration", type=float, default=15.0)
+    parser.add_argument("--quiet", action="store_true", help="Suppress state lines")
+    args = parser.parse_args()
+
+    print(
+        f"Starting SO101Platform — drive(0,0) @ {1.0 / TX_INTERVAL:.0f} Hz "
+        f"for {args.duration:.0f}s (write response={_gatt_write_with_response()})",
+        flush=True,
+    )
+    plat = SO101Platform(args.name, log_state=False)
+    plat.drive(0, 0)
+
+    t0 = time.monotonic()
+    end = t0 + args.duration
+    notify_count = 0
+    last_sn = 0.0
+    stale_reported = False
+
+    while time.monotonic() < end:
+        sn = float(plat._last_notify.value)
+        got = bool(plat._got_state.value)
+        if got and sn > last_sn:
+            notify_count += 1
+            last_sn = sn
+            if not args.quiet and (
+                notify_count <= 3 or notify_count % 50 == 0
+            ):
+                print(f"notify #{notify_count}", flush=True)
+
+        if got and sn > 0.0:
+            age = time.monotonic() - sn
+            if age > STALE_NOTIFY_S and not stale_reported:
+                print(f"WARN: no notify for {age:.2f}s", flush=True)
+                stale_reported = True
+        if not plat.running:
+            print("WARN: BLE worker died", flush=True)
+            break
+        time.sleep(0.01)
+
+    span = max(last_sn - t0, 0.0) if notify_count > 0 else 0.0
+    notify_hz = notify_count / span if span > 0 else 0.0
+    write_hz = 1.0 / TX_INTERVAL
+    write_count = int(args.duration * write_hz)
+    print(
+        f"notifies={notify_count} ({notify_hz:.1f} Hz) "
+        f"writes≈{write_count} ({write_hz:.1f} Hz)",
+        flush=True,
+    )
+
+    ok = notify_count >= int(args.duration * 8)
+    plat._stop.set()
+    if plat._proc is not None:
+        plat._proc.join(timeout=2.0)
+
+    if ok:
+        print("PASS", flush=True)
+        return 0
+    print("FAIL", flush=True)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main_test())

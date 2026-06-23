@@ -6,6 +6,17 @@ import numpy as np
 
 ARM_JOINT_COUNT = 6
 
+ARM_JOINT_NAMES = (
+    "shoulder_pan",
+    "shoulder_lift",
+    "elbow_flex",
+    "wrist_flex",
+    "wrist_roll",
+    "gripper",
+)
+
+DEFAULT_RAW_LIMITS = np.tile([0, 4095], (ARM_JOINT_COUNT, 1)).astype(np.int32)
+
 
 def parse_arm_joints(
     joints: list[int] | tuple[int, ...] | np.ndarray,
@@ -42,3 +53,20 @@ def parse_arm_joints(
             raise ValueError(f"joint[{i}]={iv} out of range 0..4095")
         out.append(iv)
     return out
+
+def vector_map(
+    vector: np.ndarray,
+    range1: np.ndarray,
+    range2: np.ndarray,
+    clamp: bool = True,
+) -> np.ndarray:
+    """Linearly map ``vector`` from ``range1`` endpoints to ``range2`` (both N×2)."""
+    assert range1.shape[1] == range2.shape[1] == 2
+    assert vector.shape[0] == range1.shape[0] == range2.shape[0]
+    denom = range1[:, 1] - range1[:, 0]
+    mapped = range2[:, 0] + (vector - range1[:, 0]) * (range2[:, 1] - range2[:, 0]) / denom
+    if clamp:
+        lo = np.minimum(range2[:, 0], range2[:, 1])
+        hi = np.maximum(range2[:, 0], range2[:, 1])
+        mapped = np.clip(mapped, lo, hi)
+    return mapped

@@ -18,6 +18,12 @@ dependencies = [
     "pyserial>=3.5",
 ]
 
+[project.optional-dependencies]
+viewer = [
+    "panda3d>=1.10",
+    "pyinstaller>=6.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["soble*"]

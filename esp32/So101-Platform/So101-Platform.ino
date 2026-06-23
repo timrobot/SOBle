@@ -12,6 +12,8 @@
 #include "HostSerial.h"
 #include "WS_QMI8658.h"
 #include "Madgwick.h"
+#include "IMUCircleQueue.h"
+#include "QuaternionUtil.h"
 
 // Waveshare ESP32-S3-LCD-1.3 display + IMU
 Arduino_DataBus *bus = new Arduino_ESP32SPI(38 /* DC */, 39 /* CS */, 40 /* SCK */, 41 /* MOSI */,
@@ -25,9 +27,9 @@ Arduino_GFX *gfx = new Arduino_ST7789(bus, 42 /* RST */, 1 /* rotation: 90° CW 
 #define RASPI_BAUD 115200
 
 // STS serial bus on the 16-pin header (see Waveshare schematic GPIO_OUT / H2+H1).
-// ESP32 RX ← STS TX, ESP32 TX → STS RX
-#define ARM_RX 1   // ← STS TX
-#define ARM_TX 2   // → STS RX
+// ESP32 TX → STS RX, ESP32 RX ← STS TX
+#define ARM_TX 1
+#define ARM_RX 2
 #define ARM_BAUD 1000000
 
 // BLE GATT
@@ -89,9 +91,12 @@ static uint8_t raspi_alive = 0;
 static uint8_t wifi_connected = 0;
 static uint8_t disp_raspi_alive = 0xFF;
 static uint8_t disp_wifi_connected = 0xFF;
+static uint8_t sts_present = 0;
+static uint8_t disp_sts_present = 0xFF;
 
 static constexpr int16_t kDispStatusPiY = 100;
 static constexpr int16_t kDispStatusWifiY = 124;
+static constexpr int16_t kDispStatusStsY = 148;
 static constexpr int16_t kDispStatusLineH = 20;
 
 STSDriver sts(2, ARM_RX, ARM_TX, ARM_BAUD);
@@ -106,12 +111,23 @@ static constexpr float MADGWICK_BETA = 0.06f;
 Madgwick imuFilter(MADGWICK_BETA);
 static uint32_t imuMicrosPrev = 0;
 
-struct CbServer : BLEServerCallbacks {
-  void onConnect(BLEServer *) { bleClientConnected = true; }
+static IMUCircleQueue imuCal;
+static float gQuat0[4] = {1.f, 0.f, 0.f, 0.f};
 
-  void onDisconnect(BLEServer *) {
+struct CbServer : BLEServerCallbacks {
+  void onConnect(BLEServer *) {
+    bleClientConnected = true;
+    prevBleRxMs = 0;
+  }
+
+  void onDisconnect(BLEServer *pServer) {
     bleClientConnected = false;
+    prevBleRxMs = 0;
+    stsHaltSent = false;
     BLEDevice::startAdvertising();
+    if (pServer != nullptr && pServer->getAdvertising() != nullptr) {
+      pServer->getAdvertising()->start();
+    }
   }
 };
 
@@ -197,10 +213,6 @@ static void unpackArm12(const uint8_t packed[9], uint16_t out[STSDriver::kArmJoi
   }
 }
 
-static inline int16_t quatUnitToMilli(float q) {
-  return constrain((long)lroundf(q * 1000.0f), -32768, 32767);
-}
-
 static void driveArmJointsFromTargets() {
   unpackArm12(targets.arm, gArmRawPos);
 
@@ -261,29 +273,47 @@ static void driveWheelVelocityFromTargets() {
   sts.setSpeed({7, 8}, wheelSpeed);
 }
 
-// prevBleRxMs is updated in BLE onWrite (async); use signed delta so millis() wrap
-// or a stale snapshot cannot make bleActive false while the host is still streaming.
 static bool isBleActive(unsigned long now) {
   if (prevBleRxMs == 0) {
     return false;
   }
-  return (long)(now - prevBleRxMs) < BLE_RX_TIMEOUT;
+  return now - prevBleRxMs < BLE_RX_TIMEOUT;
 }
 
-static void updateIMU() {
+static bool sampleIMU(float q[4]) {
   float ax, ay, az, gx, gy, gz, tempC;
   if (!QMI8658_read(ax, ay, az, gx, gy, gz, tempC)) {
-    return;
+    return false;
   }
 
   const uint32_t nowUs = micros();
   float dt = (nowUs - imuMicrosPrev) * 1e-6f;
   imuMicrosPrev = nowUs;
   if (dt <= 0.f || dt > 0.2f) {
-    return;
+    return false;
   }
 
   imuFilter.updateIMU(gx * DEG_TO_RAD, gy * DEG_TO_RAD, gz * DEG_TO_RAD, ax, ay, az, dt);
+  q[0] = imuFilter.q0();
+  q[1] = imuFilter.q1();
+  q[2] = imuFilter.q2();
+  q[3] = imuFilter.q3();
+  return true;
+}
+
+static void calibrateIMUZero() {
+  imuCal.reset();
+  while (!imuCal.isFull()) {
+    float q[4];
+    if (sampleIMU(q)) {
+      imuCal.push(q[0], q[1], q[2], q[3]);
+    }
+    delay(5);
+  }
+  if (!imuCal.averageQuat(gQuat0)) {
+    gQuat0[0] = 1.f;
+    gQuat0[1] = gQuat0[2] = gQuat0[3] = 0.f;
+  }
 }
 
 static void drawStatusLine(int16_t y, const char *label, bool ok) {
@@ -301,6 +331,19 @@ static void drawStatusLine(int16_t y, const char *label, bool ok) {
   }
 }
 
+static void drawStsStatusLine(int16_t y, bool found) {
+  gfx->fillRect(8, y, 224, kDispStatusLineH, RGB565_BLACK);
+  gfx->setTextSize(2);
+  gfx->setCursor(8, y);
+  if (found) {
+    gfx->setTextColor(RGB565(0, 255, 0), RGB565_BLACK);
+    gfx->println("STS found");
+  } else {
+    gfx->setTextColor(RGB565_DARKGREY, RGB565_BLACK);
+    gfx->println("STS missing");
+  }
+}
+
 static void updateStatusDisplayIfChanged() {
   if (raspi_alive != disp_raspi_alive) {
     disp_raspi_alive = raspi_alive;
@@ -309,6 +352,10 @@ static void updateStatusDisplayIfChanged() {
   if (wifi_connected != disp_wifi_connected) {
     disp_wifi_connected = wifi_connected;
     drawStatusLine(kDispStatusWifiY, "WiFi", wifi_connected != 0);
+  }
+  if (sts_present != disp_sts_present) {
+    disp_sts_present = sts_present;
+    drawStsStatusLine(kDispStatusStsY, sts_present != 0);
   }
 }
 
@@ -338,19 +385,22 @@ void setup() {
 
   QMI8658_Init();
   imuMicrosPrev = micros();
+  calibrateIMUZero();
   st.quat[0] = 1000;
   st.quat[1] = st.quat[2] = st.quat[3] = 0;
 
   BLEDevice::init(kName);
-  BLEDevice::setMTU(512);
+  BLEDevice::setMTU(247);
 
   BLEServer *srv = BLEDevice::createServer();
   srv->setCallbacks(&cbServer);
 
   BLEService *svc = srv->createService(kService);
-  bleCh = svc->createCharacteristic(
-      kChar, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE |
-                 BLECharacteristic::PROPERTY_NOTIFY);
+  bleCh = svc->createCharacteristic(kChar,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_WRITE |
+    BLECharacteristic::PROPERTY_WRITE_NR |
+    BLECharacteristic::PROPERTY_NOTIFY);
   bleCh->addDescriptor(new BLE2902());
   bleCh->setCallbacks(&cbChar);
   bleCh->setValue("ok");
@@ -369,7 +419,31 @@ void setup() {
 }
 
 void loop() {
-  updateIMU();
+  float qNow[4] = {imuFilter.q0(), imuFilter.q1(), imuFilter.q2(), imuFilter.q3()};
+  if (sampleIMU(qNow)) {
+    imuCal.push(qNow[0], qNow[1], qNow[2], qNow[3]);
+  }
+
+  const unsigned long currentMs = millis();
+  if (bleClientConnected && currentMs - prevBleTxMs >= BLE_TX_INTERVAL) {
+    prevBleTxMs = currentMs;
+    float qBle[4];
+    if (!imuCal.weightedAverageQuat(qBle)) {
+      qBle[0] = qNow[0];
+      qBle[1] = qNow[1];
+      qBle[2] = qNow[2];
+      qBle[3] = qNow[3];
+    }
+    float qRel[4];
+    quat_diff(gQuat0, qBle, qRel);
+    st.quat[0] = quat_unit_to_milli(qRel[0]);
+    st.quat[1] = quat_unit_to_milli(qRel[1]);
+    st.quat[2] = quat_unit_to_milli(qRel[2]);
+    st.quat[3] = quat_unit_to_milli(qRel[3]);
+    bleCh->setValue((uint8_t *)&st, sizeof(st));
+    bleCh->notify();
+  }
+
   message_t *msg = hostSerial.readMessage();
   if (msg == STIMEOUT) {
     st.ntags = 0;
@@ -396,9 +470,7 @@ void loop() {
   }
   updateStatusDisplayIfChanged();
 
-  const unsigned long currentMs = millis();
-  const bool bleActive = isBleActive(currentMs);
-  if (bleActive) {
+  if (isBleActive(currentMs)) {
     stsHaltSent = false;
     if (currentMs - prevSTSWriteMs >= STS_TX_INTERVAL) {
       prevSTSWriteMs = currentMs;
@@ -418,6 +490,7 @@ void loop() {
   if (currentMs - prevSTSReadMs >= STS_RX_INTERVAL) {
     prevSTSReadMs = currentMs;
     if (sts.readAngles({1, 2, 3, 4, 5, 6, 7, 8}, gServoReadPos)) {
+      sts_present = 1;
       for (uint8_t i = 0; i < STSDriver::kArmJointCount; i++) {
         gArmRawPos[i] = (uint16_t)(gServoReadPos[i] & 0x0FFF);
       }
@@ -426,17 +499,9 @@ void loop() {
       gWheelRawPos[0] = (uint16_t)(gServoReadPos[6] & 0x0FFF); // STS 7 = left
       gWheelRawPos[1] = (uint16_t)(gServoReadPos[7] & 0x0FFF); // STS 8 = right
       packWheelEnc12(gWheelRawPos[0], gWheelRawPos[1], st.wheelEnc);
+    } else {
+      sts_present = 0;
     }
-  }
-
-  const unsigned long notifyNow = millis();
-  if (bleClientConnected && notifyNow - prevBleTxMs >= BLE_TX_INTERVAL) {
-    prevBleTxMs = notifyNow;
-    st.quat[0] = quatUnitToMilli(imuFilter.q0());
-    st.quat[1] = quatUnitToMilli(imuFilter.q1());
-    st.quat[2] = quatUnitToMilli(imuFilter.q2());
-    st.quat[3] = quatUnitToMilli(imuFilter.q3());
-    bleCh->setValue((uint8_t *)&st, sizeof(st));
-    bleCh->notify();
+    updateStatusDisplayIfChanged();
   }
 }

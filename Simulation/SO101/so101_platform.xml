@@ -1,0 +1,133 @@
+<?xml version="1.0" ?>
+<!-- SO-101 differential-drive mobile base (STS3215 1/345 front wheels).
+     Axes: +X forward, +Y left, +Z up (matches so101_new_calib / Panda sim).
+     Wheel layout:
+      distance from center to front wheels (+X): 5.75in
+      distance from wheel to wheel: 9.5in
+      distance from center to back wheels (-X): 5.75in
+      wheel diameter: 4in
+      wheel width: 1in
+      RPM: 50RPM
+     Front left/right wheels: velocity-controlled STS3215 output shafts; use jointpos
+     sensors for encoder angle (12-bit raw ≈ pos * 4096 / (2π) mod 4096).
+     Rear wheels: passive omni (cylinder visuals, ball joints, near-zero friction). -->
+<mujoco model="so101_platform">
+  <compiler angle="radian" meshdir="assets" autolimits="true"/>
+
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <default>
+    <default class="platform">
+      <geom contype="1" conaffinity="1" condim="3"/>
+      <joint limited="false"/>
+    </default>
+    <default class="visual">
+      <geom contype="0" conaffinity="0" group="2"/>
+    </default>
+    <default class="collision">
+      <geom group="3"/>
+    </default>
+    <!-- STS3215 1/345 at the wheel output shaft (same joint dynamics as so101_new_calib). -->
+    <default class="sts3215">
+      <geom contype="0" conaffinity="0"/>
+      <joint damping="0.60" frictionloss="0.052" armature="0.028" limited="false"/>
+      <velocity kv="2.731" forcerange="-2.94 2.94"/>
+    </default>
+    <default class="omni_wheel">
+      <joint type="ball" damping="0.01" frictionloss="0.001" armature="0.001"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <!-- Body origin at wheel-axle height; 4 in diameter → 2 in (0.0508 m) above ground. -->
+    <body name="platform" pos="0 0 0.0508" childclass="platform">
+      <freejoint name="platform_free"/>
+
+      <inertial
+        pos="0 0 0"
+        mass="2.5"
+        fullinertia="0.02 0.03 0.04 0 0 0"/>
+
+      <!-- Deck / chassis visual mesh (meters). Yaw π to match STL forward axis. -->
+      <geom name="chassis_visual" type="mesh" class="visual"
+        mesh="platform_chassis" quat="0 0 0 1" rgba="0.15 0.15 0.15 1"/>
+      <geom name="chassis_collision" type="box" class="collision"
+        size="0.1524 0.127 0.0254" quat="0 0 0 1" rgba="0.15 0.15 0.15 1"/>
+
+      <site name="platform_center" pos="0 0 0" size="0.005" rgba="1 1 0 1"/>
+      <site name="arm_mount" pos="0 0 0" quat="1 0 0 0" size="0.01" rgba="0 1 1 1"/>
+
+      <!-- Front left drive wheel (+X, +Y). STS servo ID 7 on hardware. -->
+      <body name="wheel_fl" pos="0.14605 0.12065 0">
+        <joint name="wheel_left" type="hinge" axis="0 1 0" class="sts3215"/>
+        <inertial pos="0 0 0" mass="0.15"
+          fullinertia="0.0002 0.0003 0.0002 0 0 0"/>
+        <geom name="wheel_fl_visual" type="mesh" class="visual"
+          mesh="platform_wheel" pos="0 0 0" rgba="0.1 0.1 0.1 1"/>
+        <geom name="wheel_fl_collision" type="cylinder" class="collision"
+          friction="1.0 0.005 0.0001"
+          size="0.0508" fromto="0 0.0127 0 0 -0.0127 0" rgba="0.1 0.1 0.1 1"/>
+      </body>
+
+      <!-- Front right drive wheel (+X, -Y). STS servo ID 8 on hardware. -->
+      <body name="wheel_fr" pos="0.14605 -0.12065 0">
+        <joint name="wheel_right" type="hinge" axis="0 1 0" class="sts3215"/>
+        <inertial pos="0 0 0" mass="0.15"
+          fullinertia="0.0002 0.0003 0.0002 0 0 0"/>
+        <geom name="wheel_fr_visual" type="mesh" class="visual"
+          mesh="platform_wheel" pos="0 0 0" rgba="0.1 0.1 0.1 1"/>
+        <geom name="wheel_fr_collision" type="cylinder" class="collision"
+          friction="1.0 0.005 0.0001"
+          size="0.0508" fromto="0 0.0127 0 0 -0.0127 0" rgba="0.1 0.1 0.1 1"/>
+      </body>
+
+      <!-- Rear left omni (-X, +Y): cylinder look, ball joint, negligible ground friction. -->
+      <body name="wheel_rl" pos="-0.14605 0.12065 0">
+        <joint name="omni_left" class="omni_wheel"/>
+        <inertial pos="0 0 0" mass="0.10"
+          fullinertia="0.00015 0.0002 0.00015 0 0 0"/>
+        <geom name="wheel_rl_visual" type="mesh" class="visual"
+          mesh="platform_omniwheel" pos="0 0 0" rgba="0.35 0.35 0.35 1"/>
+        <geom name="wheel_rl_collision" type="cylinder" class="collision"
+          friction="0.001 0.001 0.001"
+          size="0.0508" fromto="0 0.0127 0 0 -0.0127 0" rgba="0.35 0.35 0.35 1"/>
+      </body>
+
+      <!-- Rear right omni (-X, -Y). -->
+      <body name="wheel_rr" pos="-0.14605 -0.12065 0">
+        <joint name="omni_right" class="omni_wheel"/>
+        <inertial pos="0 0 0" mass="0.10"
+          fullinertia="0.00015 0.0002 0.00015 0 0 0"/>
+        <geom name="wheel_rr_visual" type="mesh" class="visual"
+          mesh="platform_omniwheel" pos="0 0 0" rgba="0.35 0.35 0.35 1"/>
+        <geom name="wheel_rr_collision" type="cylinder" class="collision"
+          friction="0.001 0.001 0.001"
+          size="0.0508" fromto="0 0.0127 0 0 -0.0127 0" rgba="0.35 0.35 0.35 1"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <asset>
+    <mesh name="platform_chassis" file="ChassisV2.stl"/>
+    <mesh name="platform_omniwheel" file="Omniwheel.stl"/>
+    <mesh name="platform_wheel" file="FrontWheel.stl"/>
+  </asset>
+
+  <actuator>
+    <!-- Wheel angular velocity (rad/s) at the STS output shaft. ±50 RPM ≈ ±5.236 rad/s. -->
+    <velocity class="sts3215" name="wheel_left" joint="wheel_left"
+      ctrllimited="true" ctrlrange="-5.236 5.236"/>
+    <velocity class="sts3215" name="wheel_right" joint="wheel_right"
+      ctrllimited="true" ctrlrange="-5.236 5.236"/>
+  </actuator>
+
+  <sensor>
+    <!-- Encoder angle (rad, unwrapped) after rotation — map to 12-bit: round(pos * 4096 / (2π)) & 0xFFF -->
+    <jointpos name="wheel_left_pos" joint="wheel_left"/>
+    <jointpos name="wheel_right_pos" joint="wheel_right"/>
+    <jointvel name="wheel_left_vel" joint="wheel_left"/>
+    <jointvel name="wheel_right_vel" joint="wheel_right"/>
+    <framepos name="platform_pos" objtype="body" objname="platform"/>
+    <framequat name="platform_quat" objtype="body" objname="platform"/>
+  </sensor>
+</mujoco>
