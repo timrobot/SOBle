@@ -271,6 +271,7 @@ if __name__ == "__main__":
       # we only need to do something if we are in atags mode
       if cmd[0] in (CMD_TAG16H5, CMD_TAG25H9, CMD_TAG36H11):
         atag_detect(camera, detector, ser, wifi_connected)
+        last_serial_ms = time.time()
       else:
         # send a heartbeat to the ESP32 to keep the connection alive if in streaming mode
         if time.time() - last_serial_ms > 0.1: # send every 100ms so that ESP32 doesn't timeout

@@ -805,27 +805,30 @@ class SO101Platform:
             self._frame_write_slot.value = 0
             self._frame_read_slot.value = 0
 
-    def imread(self) -> np.ndarray | None:
-        """Return the latest BGR frame from the Pi camera stream (1280×720), or ``None`` if none yet."""
+    def imread(self, copy: bool = True) -> np.ndarray | None:
+        """Get latest frame as a numpy array, zero-copy from shared memory by default if copy=False."""
         if self._stream_proc is None or not self._stream_proc.is_alive():
             return None
         if int(self._frame_seq.value) == 0:
             return None
-        shape = (
-            host_camera_stream.STREAM_HEIGHT,
-            host_camera_stream.STREAM_WIDTH,
-            host_camera_stream.STREAM_CHANNELS,
-        )
-        nbytes = host_camera_stream.STREAM_FRAME_BYTES
         with self._frame_lock:
-            slot = int(self._frame_read_slot.value) % host_camera_stream.STREAM_BUFFER_COUNT
-            offset = slot * nbytes
-            return np.frombuffer(
+            slot = int(self._frame_read_slot.value)
+            offset = slot * host_camera_stream.STREAM_FRAME_BYTES
+            
+            # Map the zero-copy view over the shared memory segment
+            arr = np.frombuffer(
                 self._frame_buf.get_obj(),
                 dtype=np.uint8,
+                count=host_camera_stream.STREAM_FRAME_BYTES,
                 offset=offset,
-                count=nbytes,
-            ).reshape(shape).copy()
+            ).reshape((
+                host_camera_stream.STREAM_HEIGHT,
+                host_camera_stream.STREAM_WIDTH,
+                host_camera_stream.STREAM_CHANNELS,
+            ))
+            
+            # Conditionally copy or return the raw view pointer
+            return arr if not copy else arr.copy()
 
     def setTagFamily(self, family: str) -> None:
         """Forward tag family to the Pi ('tag16h5', 'tag25h9', 'tag36h11'). Stops host RTP receiver."""

@@ -8,8 +8,8 @@
 #define TOHEX(x) ((x) > 9 ? (x) - 10 + 'a' : (x) + '0')
 #define FROMHEX(x) ((x) <= '9' ? (x) - '0' : ((x) >= 'a' ? (x) - 'a' + 10 : (x) - 'A' + 10) )
 
-// Pi heartbeats at 100 ms in stream mode; allow a few missed frames.
-static constexpr uint32_t kPiAliveTimeoutMs = 250;
+// Pi heartbeats at 100 ms in stream mode; tag detect can take several hundred ms per frame.
+static constexpr uint32_t kPiAliveTimeoutMs = 1000;
 
 /// Drain UART RX without blocking (never call readBytes — it can wait on timeout).
 static int readAvailableNonBlocking(Stream &ser, char *buf, int readptr, int cap) {

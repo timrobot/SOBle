@@ -150,7 +150,8 @@ struct CbChar : BLECharacteristicCallbacks {
         } else {
           break;
         }
-        targets.left = (int8_t)constrain((int)targets.left, -125, 125);
+        // Host teleop is symmetric; left wheel STS mount is reversed vs right.
+        targets.left = (int8_t)constrain(-(int)targets.left, -125, 125);
         targets.right = (int8_t)constrain((int)targets.right, -125, 125);
         prevBleRxMs = millis();
         break;
