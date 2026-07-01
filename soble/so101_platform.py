@@ -267,6 +267,33 @@ def _quat_to_rph_deg(qw: float, qx: float, qy: float, qz: float) -> tuple[float,
     return roll, pitch, heading
 
 
+def _quat_conjugate(q: np.ndarray) -> np.ndarray:
+    q = np.asarray(q, dtype=np.float64)
+    return np.array([q[0], -q[1], -q[2], -q[3]], dtype=np.float64)
+
+
+def _quat_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    q1 = np.asarray(q1, dtype=np.float64)
+    q2 = np.asarray(q2, dtype=np.float64)
+    return np.array(
+        [
+            q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2] - q1[3] * q2[3],
+            q1[0] * q2[1] + q1[1] * q2[0] + q1[2] * q2[3] - q1[3] * q2[2],
+            q1[0] * q2[2] - q1[1] * q2[3] + q1[2] * q2[0] + q1[3] * q2[1],
+            q1[0] * q2[3] + q1[1] * q2[2] - q1[2] * q2[1] + q1[3] * q2[0],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _quat_normalize(q: np.ndarray) -> np.ndarray:
+    q = np.asarray(q, dtype=np.float64)
+    norm = float(np.linalg.norm(q))
+    if norm == 0.0:
+        return np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    return q / norm
+
+
 def _format_state_line(state: dict) -> str:
     enc_l, enc_r = state["enc"]
     arm = state["arm"]
@@ -289,6 +316,8 @@ def _publish_state(
     enc: mp.Array,
     arm_raw: mp.Array,
     quat: mp.Array,
+    quat0: mp.Array,
+    quat0_valid: mp.Value,
     ntags: mp.Value,
     tag_blob: mp.Array,
     raspi: mp.Value,
@@ -303,7 +332,22 @@ def _publish_state(
         enc[1] = enc_r
         for i, v in enumerate(state["arm"]):
             arm_raw[i] = v
-        quat[0], quat[1], quat[2], quat[3] = qw, qx, qy, qz
+
+        current_q = np.array([float(qw), float(qx), float(qy), float(qz)], dtype=np.float64)
+        if not bool(quat0_valid.value):
+            quat0[0], quat0[1], quat0[2], quat0[3] = current_q
+            quat0_valid.value = True
+            calibrated_q = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        else:
+            base_q = np.array(
+                [float(quat0[0]), float(quat0[1]), float(quat0[2]), float(quat0[3])],
+                dtype=np.float64,
+            )
+            calibrated_q = _quat_normalize(
+                _quat_multiply(current_q, _quat_conjugate(base_q))
+            )
+
+        quat[0], quat[1], quat[2], quat[3] = calibrated_q
         ntags.value = n
         raspi.value = bool(state["raspi"])
         wifi.value = bool(state["wifi"])
@@ -325,6 +369,8 @@ def _clear_state(
     ntags: mp.Value,
     raspi: mp.Value,
     wifi: mp.Value,
+    quat0: mp.Array,
+    quat0_valid: mp.Value,
     lock: mp.Lock,
 ) -> None:
     with lock:
@@ -333,6 +379,8 @@ def _clear_state(
         ntags.value = 0
         raspi.value = False
         wifi.value = False
+        quat0_valid.value = False
+        quat0[0], quat0[1], quat0[2], quat0[3] = 0.0, 0.0, 0.0, 0.0
 
 def _corners_to_pixels(corners: tuple[int, ...], tag_corner_scale: float, tag_origin: tuple[float, float]) -> list[tuple[float, float]]:
     """Undo Pi packing: pixel = corner / scale + origin (detect_atags.py inverse)."""
@@ -407,6 +455,8 @@ async def _ble_session(
     enc: mp.Array,
     arm_raw: mp.Array,
     quat: mp.Array,
+    quat0: mp.Array,
+    quat0_valid: mp.Value,
     ntags: mp.Value,
     tag_blob: mp.Array,
     raspi: mp.Value,
@@ -424,6 +474,8 @@ async def _ble_session(
             enc,
             arm_raw,
             quat,
+            quat0,
+            quat0_valid,
             ntags,
             tag_blob,
             raspi,
@@ -512,6 +564,8 @@ async def _ble_main(
     enc: mp.Array,
     arm_raw: mp.Array,
     quat: mp.Array,
+    quat0: mp.Array,
+    quat0_valid: mp.Value,
     ntags: mp.Value,
     tag_blob: mp.Array,
     raspi: mp.Value,
@@ -546,6 +600,8 @@ async def _ble_main(
                 enc,
                 arm_raw,
                 quat,
+                quat0,
+                quat0_valid,
                 ntags,
                 tag_blob,
                 raspi,
@@ -563,7 +619,7 @@ async def _ble_main(
             print("Disconnected.", flush=True)
 
         _clear_state(
-            got_state, last_notify, ntags, raspi, wifi, lock
+            got_state, last_notify, ntags, raspi, wifi, quat0, quat0_valid, lock
         )
         if stop.is_set():
             break
@@ -587,6 +643,8 @@ def _ble_worker(
     enc: mp.Array,
     arm_raw: mp.Array,
     quat: mp.Array,
+    quat0: mp.Array,
+    quat0_valid: mp.Value,
     ntags: mp.Value,
     tag_blob: mp.Array,
     raspi: mp.Value,
@@ -654,6 +712,8 @@ class SO101Platform:
         self._arm_raw = MP_CTX.Array("i", ARM_JOINT_COUNT)
         self._quat = MP_CTX.Array("d", 4)
         self._quat[0] = 1.0
+        self._quat0 = MP_CTX.Array("d", 4)
+        self._quat0_valid = MP_CTX.Value("b", False)
         self._ntags = MP_CTX.Value("i", 0)
         self._tag_blob = MP_CTX.Array("B", TAG_BLOB_LEN)
         self._raspi = MP_CTX.Value("b", False)
@@ -913,6 +973,8 @@ class SO101Platform:
                 self._enc,
                 self._arm_raw,
                 self._quat,
+                self._quat0,
+                self._quat0_valid,
                 self._ntags,
                 self._tag_blob,
                 self._raspi,
@@ -939,6 +1001,8 @@ class SO101Platform:
             self._ntags,
             self._raspi,
             self._wifi,
+            self._quat0,
+            self._quat0_valid,
             self._lock,
         )
 
