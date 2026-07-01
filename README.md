@@ -69,7 +69,7 @@ The **SO101 follower arm** (Feetech servos and its own controller) is not includ
 
 If you still need arm servos, order the two drive **STS3215** units from the table at the same time as the arm servos to save on shipping.
 
-Once you have printed all your parts and acquired the electronics, follow the [assembly guide](https://github.com/timrobot/SOBle/wiki/Assembly).
+Once you have printed all your parts and acquired the electronics, follow the [Assembly Guide](https://github.com/timrobot/SOBle/wiki/Assembly-Guide).
 
 ---
 
@@ -94,25 +94,23 @@ from soble import SO101Leader
 leader = SO101Leader("/dev/tty.usbmodem575E0032081") # Mac
 leader = SO101Leader("/dev/ttyACM0") # Linux
 leader = SO101Leader("COM3") # Windows
-leader.load_config("config.json")  # or pass config_path= in the constructor
+leader.load_config("config.json")  # or pass config= in the constructor
 
 ```
 
 
 | Method                                                                                           | Returns                                       | Notes                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SO101Leader.limits_from_config(cfg: dict)`                                                      | `tuple[np.ndarray, np.ndarray]`               | Leader and follower limit arrays, each shape **(6, 2)** with `[min, max]` per joint. **Standard SO101:** `"so101_leader"` / `"so101_follower"` with `"joints"` → `min_limit` / `max_limit`. **Minified:** `"leader"` / `"follower"` with **J1…J6** `[min, max]`. |
-| `SO101Leader.limits_from_path(path)`                                                           | `tuple[np.ndarray, np.ndarray]`               | Load limits from JSON without opening serial (same return shape as `limits_from_config`).                                                                                  |
-| `SO101Leader(port, leader_limits=None, follower_limits=None, *, config_path=None, baud=1000000)` | —                                             | **`port` required**. Serial starts on init. Pass limits, `config_path`, or call `load_config()` for mapping.                                                                                       |
-| `load_config(path)`                                                                              | `None`                                        | Set leader/follower limit mapping.                                                                                                    |
+| `CalibrationConfig.from_path(path)`                                                              | `CalibrationConfig`                           | Load calibration from JSON (see [`examples/config.json`](examples/config.json)).                                                                                           |
+| `CalibrationConfig.limits_arrays()`                                                              | `tuple[np.ndarray, np.ndarray]`               | Leader and follower limit arrays, each shape **(6, 2)** with `[min, max]` per joint.                                                                                       |
+| `SO101Leader(port, *, config=None, baud=1000000)`                                                | —                                             | **`port` required**. Serial starts on init. Pass `config` or call `load_config()` for mapping.                                                                             |
+| `load_config(config)`                                                                            | `None`                                        | Set leader/follower limit mapping from a `CalibrationConfig` or JSON path.                                                                                               |
+| `config` (property)                                                                              | `CalibrationConfig \| None`                   | Active calibration, if loaded.                                                                                                                                             |
 | `getArmPositions()`                                                                              | `list[int]`                                   | **6** leader joint raws **0 … 4095**, or **`[]`** if not ready.                                                                                                             |
 | `getMappedPositions()`                                                                              | `list[int]`                                   | **6** follower-mapped raws **0 … 4095**, or leader raws **1:1** if no config; **`[]`** if not ready.                                                                                                  |
 | `setArmPositions(joints)`                                                                        | `None`                                        | Engage leader torque, or pass **`[]`** to release (backdrivable; default).                                                                                                 |
 
-`load_config` accepts either:
-
-- **Standard SO101** — `"so101_leader"` / `"so101_follower"`, each with a `"joints"` object (`min_limit` / `max_limit` per joint, keyed by name and sorted by motor `id`)
-- **minified** — `"leader"` / `"follower"` with **J1…J6** as `[min, max]` pairs (see [`examples/min_config.json`](examples/min_config.json))
+`load_config` accepts a `CalibrationConfig` instance or a path to the standard SO101 JSON file. See [`examples/config.json`](examples/config.json) and `CalibrationConfig` in `soble.calibration_config`.
 
 ## Code reference — Class `SO101Platform`
 

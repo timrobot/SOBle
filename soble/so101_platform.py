@@ -17,7 +17,7 @@ from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
 
 from soble import camera_stream as host_camera_stream
-from soble.arm_joints import ARM_JOINT_COUNT, parse_arm_joints
+from soble.sts_protocol import ARM_JOINT_COUNT, parse_arm_joints
 
 # BLE worker must use spawn on Linux — fork inherits parent threads/state and breaks asyncio/BlueZ.
 MP_CTX = mp.get_context("spawn")

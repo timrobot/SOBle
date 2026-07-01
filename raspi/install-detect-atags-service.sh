@@ -224,8 +224,8 @@ main() {
   log
   log "Status:  systemctl --user status $UNIT_NAME"
   log "Logs:    journalctl --user -u $UNIT_NAME -f"
-  log "Stop:    systemctl --user stop $UNIT_NAME"
-  log "Disable: systemctl --user disable $UNIT_NAME"
+  log "Stop:    $RASPI_DIR/stop-detect-atags-service.sh"
+  log "Disable: $RASPI_DIR/stop-detect-atags-service.sh --disable"
 }
 
 main "$@"

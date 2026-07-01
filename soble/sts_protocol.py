@@ -1,4 +1,4 @@
-"""Arm joint list validation shared by leader and platform."""
+"""FeeTech STS serial protocol and SO-101 arm helpers."""
 
 from __future__ import annotations
 
@@ -29,6 +29,14 @@ STS_BAUDRATE = 1_000_000
 STS_BROADCAST_ID = 0xFE  # 254 — single motor on bus
 STS_REG_ID = 5
 STS_REG_LOCK = 55
+STS_REG_TORQUE_ENABLE = 40
+STS_REG_GOAL_POSITION = 0x2A
+STS_REG_PRESENT_POSITION = 0x38
+STS_INST_SYNC_READ = 0x82
+STS_INST_SYNC_WRITE = 0x83
+STS_STATUS_FRAME_LEN = 8
+STS_PRESENT_POSITION_DATA_LEN = 2
+STS_CENTER_RAW = 2048
 STS_MIN_MOTOR_ID = 1
 STS_MAX_MOTOR_ID = 253
 STS_WRITE_DATA = 3
@@ -76,6 +84,129 @@ def _sts_checksum(packet: list[int]) -> int:
     return (~sum(packet[2:])) & 0xFF
 
 
+def _sts_sync_write(ser: serial.Serial, packet: bytes) -> None:
+    ser.reset_input_buffer()
+    ser.write(packet)
+    ser.flush()
+
+
+def _build_sync_write_byte(ids: list[int], reg: int, values: list[int]) -> bytes:
+    packet = [
+        0xFF,
+        0xFF,
+        0xFE,
+        4 + 2 * len(ids),
+        STS_INST_SYNC_WRITE,
+        reg,
+        1,
+    ]
+    for motor_id, value in zip(ids, values):
+        packet.extend([motor_id, value & 0xFF])
+    packet.append(_sts_checksum(packet))
+    return bytes(packet)
+
+
+def _build_sync_write_position(ids: list[int], positions: list[int]) -> bytes:
+    packet = [
+        0xFF,
+        0xFF,
+        0xFE,
+        4 + 5 * len(ids),
+        STS_INST_SYNC_WRITE,
+        STS_REG_GOAL_POSITION,
+        4,
+    ]
+    for motor_id, pos in zip(ids, positions):
+        raw = int(pos) & 0xFFF
+        packet.extend([motor_id, raw & 0xFF, (raw >> 8) & 0xFF, 0, 0])
+    packet.append(_sts_checksum(packet))
+    return bytes(packet)
+
+
+def _build_sync_read_packet(
+    ids: list[int],
+    *,
+    reg: int = STS_REG_PRESENT_POSITION,
+    data_len: int = STS_PRESENT_POSITION_DATA_LEN,
+) -> bytes:
+    packet = [
+        0xFF,
+        0xFF,
+        0xFE,
+        len(ids) + 4,
+        STS_INST_SYNC_READ,
+        reg,
+        data_len,
+        *ids,
+    ]
+    packet.append(_sts_checksum(packet))
+    return bytes(packet)
+
+
+def _parse_sts_status_frame(frame: bytes) -> int | None:
+    if len(frame) < STS_STATUS_FRAME_LEN or frame[0] != 0xFF or frame[1] != 0xFF:
+        return None
+    if _sts_checksum(list(frame[2:-1])) != frame[-1]:
+        return None
+    return (frame[6] << 8) | frame[5]
+
+
+def _find_sts_position(rx_buf: bytes, motor_id: int) -> int | None:
+    for i in range(len(rx_buf) - STS_STATUS_FRAME_LEN + 1):
+        if (
+            rx_buf[i] == 0xFF
+            and rx_buf[i + 1] == 0xFF
+            and rx_buf[i + 2] == motor_id
+        ):
+            return _parse_sts_status_frame(rx_buf[i : i + STS_STATUS_FRAME_LEN])
+    return None
+
+
+def sts_sync_read_positions(
+    ser: serial.Serial, ids: list[int]
+) -> dict[int, int | None]:
+    """SYNC_READ present position for each motor ID (``None`` if frame not found)."""
+    expected_rx = len(ids) * STS_STATUS_FRAME_LEN
+    ser.reset_input_buffer()
+    ser.write(_build_sync_read_packet(ids))
+    ser.flush()
+    rx = ser.read(expected_rx)
+    return {motor_id: _find_sts_position(rx, motor_id) for motor_id in ids}
+
+
+def sts_sync_enable_torque(
+    ser: serial.Serial, ids: list[int], enabled: bool
+) -> None:
+    """SYNC_WRITE Torque_Enable (1 = holding, 0 = backdrivable) for each motor ID."""
+    value = 1 if enabled else 0
+    _sts_sync_write(
+        ser,
+        _build_sync_write_byte(ids, STS_REG_TORQUE_ENABLE, [value] * len(ids)),
+    )
+
+
+def _build_sync_write_u16(ids: list[int], reg: int, values: list[int]) -> bytes:
+    packet = [
+        0xFF,
+        0xFF,
+        0xFE,
+        4 + 3 * len(ids),
+        STS_INST_SYNC_WRITE,
+        reg,
+        2,
+    ]
+    for motor_id, value in zip(ids, values):
+        raw = int(value) & 0xFFFF
+        packet.extend([motor_id, raw & 0xFF, (raw >> 8) & 0xFF])
+    packet.append(_sts_checksum(packet))
+    return bytes(packet)
+
+
+sts_sync_write = _sts_sync_write
+build_sts_sync_write_byte = _build_sync_write_byte
+build_sts_sync_write_u16 = _build_sync_write_u16
+
+
 def _sts_write_reg_byte(
     ser: serial.Serial, motor_id: int, register: int, value: int
 ) -> None:
@@ -121,6 +252,48 @@ def write_sts_servo_id(
         True,
         f"Servo ID set to {target_id}. Power-cycle the motor for the change to take effect.",
     )
+
+
+def center_sts_servo(
+    comport: str,
+    motor_id: int,
+    *,
+    position: int = STS_CENTER_RAW,
+    baudrate: int = STS_BAUDRATE,
+    settle_s: float = 1.5,
+) -> tuple[bool, str]:
+    """Enable torque, move one STS servo to ``position``, then release torque.
+
+    Use broadcast ID 254 when only one motor is on the bus.
+    Returns ``(success, message)`` for UI feedback.
+    """
+    import serial
+
+    if motor_id != STS_BROADCAST_ID and not (
+        STS_MIN_MOTOR_ID <= motor_id <= STS_MAX_MOTOR_ID
+    ):
+        return (
+            False,
+            f"Motor ID must be {STS_MIN_MOTOR_ID}-{STS_MAX_MOTOR_ID} or broadcast, "
+            f"got {motor_id}.",
+        )
+    if not 0 <= position <= 4095:
+        return False, f"Position must be 0..4095, got {position}."
+
+    ids = [motor_id]
+    try:
+        with serial.Serial(comport, baudrate, timeout=1) as ser:
+            sts_sync_enable_torque(ser, ids, True)
+            time.sleep(0.02)
+            _sts_sync_write(ser, _build_sync_write_position(ids, [position]))
+            time.sleep(settle_s)
+            sts_sync_enable_torque(ser, ids, False)
+    except serial.SerialException as exc:
+        return False, f"Could not open {comport}: {exc}"
+    except Exception as exc:
+        return False, f"Center failed: {exc}"
+
+    return True, f"Servo driven to {position}, torque released."
 
 
 def _is_sts_serial_device(device: str) -> bool:
