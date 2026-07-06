@@ -6,7 +6,7 @@
 
 The SO101 Platform is a four-wheeled differential-drive mobile base with two powered wheels. It reports heading, pitch, roll, and wheel encoder positions, mounts an SO101 arm, and supports an optional gripper-mounted camera for AprilTag detection or live video streaming over WiFi.
 
-This repo provides a Python package for host-side control and teleop over BLE, with USB **leader** arm mapping. A standalone 3D viewer is available from [GitHub Releases](https://github.com/timrobot/SOBle/releases). Print files and a parts list are in [STL/](STL/) if you want to build the platform yourself.
+This repo provides a Python package for host-side control and teleop over BLE, with USB **leader** arm mapping. A [standalone 3D viewer](https://timrobot.github.io/SOBle/) is available to connect to your robot immediately and see if the system is up and running. Print files and a parts list are in [STL/](STL/) if you want to build the platform yourself.
 
 ---
 
