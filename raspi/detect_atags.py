@@ -7,8 +7,9 @@ import picamera2
 import apriltag
 from libcamera import controls
 import serial
+import socket
 from base64 import b64decode, b64encode
-import camera_stream
+import camera_stream  # where the webrtc camera stream is implemented
 
 
 # Host → Pi commands: D + LL<base64>CC (HostSerial::writeBytes; D = devid, ignored on Pi).
@@ -23,10 +24,12 @@ CMD_PAYLOAD_LEN = 7
 
 serial_read_buffer = b""
 
-def pack_status_byte(ntags: int, wifi_connected: bool) -> bytes:
+def pack_status_byte(ntags: int, wifi_connected: bool, is_ipv4=False) -> bytes:
   value = min(max(ntags, 0), 10) & 0x1F
   if wifi_connected:
     value |= 0x80
+    if is_ipv4:
+      value |= 0x20
   return bytes([value])
 
 def build_write_message(payload: bytes) -> str:
@@ -73,9 +76,8 @@ def parse_cmd_payload(payload: bytes):
         print(f"Invalid command payload length: {len(payload)}")
         return None
     if cmd == CMD_STREAM:
-        ip = str(ipaddress.IPv4Address(int.from_bytes(payload[1:5], "little")))
-        port = int.from_bytes(payload[5:7], "little")
-        return (CMD_STREAM, ip, port)
+        print("CMD_STREAM command received")
+        return (CMD_STREAM,)
     if cmd == CMD_TAG16H5:
         print("Tag16H5 command received")
         return (CMD_TAG16H5,)
@@ -106,52 +108,65 @@ def poll_serial(ser: serial.Serial):
   return result
 
 
-def handle_request(request, *, camera, detector, cmd, process, wifi_connected):
-  """Apply one host command. Returns (camera, detector, cmd, process, wifi_connected)."""
+def get_lan_ip() -> tuple[int, int, int, int]:
+    """Return the LAN IPv4 address as a tuple of 4 integers."""
+    # We create a UDP socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # We don't actually connect, but this triggers the OS to choose the right interface
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return tuple(int(x) for x in ip.split('.'))
+
+
+def handle_request(request, *, camera, detector, cmd, streamer, wifi_connected):
+  """Apply one host command. Returns (camera, detector, cmd, streamer, wifi_connected)."""
   if request[0] == CMD_STREAM:
+    print(f"[STREAM] CMD_STREAM received; starting WebRTC streamer...", flush=True)
     release_camera(camera)
     camera = None
     wifi_connected = get_wifi_connected()
     if not wifi_connected:
       print("WiFi not connected, cannot start camera stream", flush=True)
-      return camera, detector, cmd, process, wifi_connected
-    if process is not None:
-      camera_stream.stop_camera_stream(process)
-      process = None
+      return camera, detector, cmd, streamer, wifi_connected
+    if streamer is not None:
+      print("[STREAM] Stopping existing streamer...", flush=True)
+      streamer.stopStreamTask()
+      streamer = None
     time.sleep(0.5)  # libcamera needs a moment after picamera2 releases the sensor
-    process = camera_stream.run_camera_stream(
-      request[1], request[2], 1280, 720, 30, 4_000_000
-    )
-  elif request[0] == CMD_TAG16H5:
-    if process is not None:
-      camera_stream.stop_camera_stream(process)
-      process = None
+    
+    # Initialize the engine module task via spawn multiprocess parameters
+    print("[STREAM] Creating WebRTCStreamer instance...", flush=True)
+    streamer = camera_stream.WebRTCStreamer()
+    streamer.startStreamTask()
+    print("[STREAM] WebRTC streamer started.", flush=True)
+
+  elif request[0] in (CMD_TAG16H5, CMD_TAG25H9, CMD_TAG36H11):
+    tag_family = {CMD_TAG16H5: "TAG16H5", CMD_TAG25H9: "TAG25H9", CMD_TAG36H11: "TAG36H11"}.get(request[0], "UNKNOWN")
+    print(f"[TAGS] Switching to {tag_family} mode; stopping streamer if active...", flush=True)
+    if streamer is not None:
+      print(f"[TAGS] Stopping WebRTC streamer...", flush=True)
+      streamer.stopStreamTask()
+      streamer = None
       time.sleep(0.5)
-    if cmd[0] != CMD_TAG16H5:
+    
+    if request[0] == CMD_TAG16H5 and cmd[0] != CMD_TAG16H5:
       detector = apriltag.apriltag("tag16h5", threads=4, decimate=2.0, refine_edges=1)
-    if camera is None:
-      camera = start_camera()
-  elif request[0] == CMD_TAG25H9:
-    if process is not None:
-      camera_stream.stop_camera_stream(process)
-      process = None
-      time.sleep(0.5)
-    if cmd[0] != CMD_TAG25H9:
+    elif request[0] == CMD_TAG25H9 and cmd[0] != CMD_TAG25H9:
       detector = apriltag.apriltag("tag25h9", threads=4, decimate=2.0, refine_edges=1)
-    if camera is None:
-      camera = start_camera()
-  elif request[0] == CMD_TAG36H11:
-    if process is not None:
-      camera_stream.stop_camera_stream(process)
-      process = None
-      time.sleep(0.5)
-    if cmd[0] != CMD_TAG36H11:
+    elif request[0] == CMD_TAG36H11 and cmd[0] != CMD_TAG36H11:
       detector = apriltag.apriltag("tag36h11", threads=4, decimate=2.0, refine_edges=1)
+      
     if camera is None:
       camera = start_camera()
+
   if request[0] in (CMD_STREAM, CMD_TAG16H5, CMD_TAG25H9, CMD_TAG36H11):
     cmd = request
-  return camera, detector, cmd, process, wifi_connected
+  return camera, detector, cmd, streamer, wifi_connected
 
 
 def release_camera(camera: picamera2.Picamera2 | None) -> None:
@@ -215,7 +230,10 @@ def atag_detect(camera: picamera2.Picamera2, detector: apriltag.apriltag, ser: s
   if ntags > 0:
     message = pack_status_byte(ntags, wifi_connected) + np.concatenate(tag_data, axis=0).tobytes()
   else:
-    message = pack_status_byte(0, wifi_connected)
+    if wifi_connected:
+      message = pack_status_byte(0, True, is_ipv4=True) + np.array(get_lan_ip(), np.uint8).tobytes()
+    else:
+      message = pack_status_byte(0, False)
   ser.write(build_write_message(message).encode("ascii"))
   ser.flush()
 
@@ -242,7 +260,8 @@ if __name__ == "__main__":
   ser.flushOutput()
   ser.reset_input_buffer()
   ser.reset_output_buffer()
-  process = None
+  
+  streamer = None
   # by default, we will start in atags mode
   camera = start_camera()
   detector = apriltag.apriltag("tag16h5", threads=4, decimate=2.0, refine_edges=1)
@@ -259,12 +278,12 @@ if __name__ == "__main__":
 
       request = poll_serial(ser)
       if request is not None:
-        camera, detector, cmd, process, wifi_connected = handle_request(
+        camera, detector, cmd, streamer, wifi_connected = handle_request(
           request,
           camera=camera,
           detector=detector,
           cmd=cmd,
-          process=process,
+          streamer=streamer,
           wifi_connected=wifi_connected,
         )
 
@@ -277,7 +296,10 @@ if __name__ == "__main__":
         if time.time() - last_serial_ms > 0.1: # send every 100ms so that ESP32 doesn't timeout
           last_serial_ms = time.time()
           if wifi_connected:
-            ser.write(build_write_message(pack_status_byte(0, True)).encode("ascii"))
+            ip_tuple = get_lan_ip()
+            print(f"[HEARTBEAT] Streaming mode active, IPv4: {ip_tuple[0]}.{ip_tuple[1]}.{ip_tuple[2]}.{ip_tuple[3]}, Streamer: {'active' if streamer and streamer._process and streamer._process.is_alive() else 'inactive'}", flush=True)
+            message = pack_status_byte(0, True, is_ipv4=True) + np.array(ip_tuple, np.uint8).tobytes()
+            ser.write(build_write_message(message).encode("ascii"))
             ser.flush()
           else:
             ser.write(build_write_message(pack_status_byte(0, False)).encode("ascii"))
@@ -285,21 +307,21 @@ if __name__ == "__main__":
 
       request = poll_serial(ser)
       if request is not None:
-        camera, detector, cmd, process, wifi_connected = handle_request(
+        camera, detector, cmd, streamer, wifi_connected = handle_request(
           request,
           camera=camera,
           detector=detector,
           cmd=cmd,
-          process=process,
+          streamer=streamer,
           wifi_connected=wifi_connected,
         )
 
   except KeyboardInterrupt:
     print("Keyboard interrupt received, exiting...")
   finally:
-    if process is not None:
-      camera_stream.stop_camera_stream(process)
-      process = None
+    if streamer is not None:
+      streamer.stopStreamTask()
+      streamer = None
     if camera is not None:
       release_camera(camera)
       camera = None

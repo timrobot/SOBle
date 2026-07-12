@@ -446,6 +446,7 @@ void loop() {
   }
 
   message_t *msg = hostSerial.readMessage();
+  bool is_ipv4 = false;
   if (msg == STIMEOUT) {
     st.ntags = 0;
     memset(st.tags, 0, 10 * sizeof(AprilTagInfo));
@@ -454,20 +455,29 @@ void loop() {
   } else if (msg != nullptr && msg->length >= 1) {
     raspi_alive = 1;
     wifi_connected = (msg->data[0] & 0x80) >> 7; // first bit is wifi_connected status
-    st.ntags = msg->data[0] & 0x1F; // the last 5 bits are the ntags count
-    if (st.ntags > 10) {
-      st.ntags = 10;
+    is_ipv4 = (msg->data[0] & 0x20) >> 5; // third bit is flag if this is ipv4
+    if (is_ipv4) {
+      if (msg->length == 5) {
+        // we have an ipv4 address
+        memcpy(st.tags, &msg->data[1], 4);
+      }
+      st.ntags = 0xE0; // 11100000
+    } else {
+      st.ntags = msg->data[0] & 0x1F; // the last 5 bits are the ntags count
+      if (st.ntags > 10) {
+        st.ntags = 10;
+      }
+      const size_t need = 1 + (size_t)st.ntags * sizeof(AprilTagInfo);
+      if (msg->length >= (int)need && st.ntags > 0) {
+        memcpy(st.tags, &msg->data[1], st.ntags * sizeof(AprilTagInfo));
+      } else if (st.ntags > 0) {
+        st.ntags = 0;
+      }
+      if (st.ntags < 10) {
+        memset(&st.tags[st.ntags], 0, (10 - st.ntags) * sizeof(AprilTagInfo));
+      }
+      st.ntags = st.ntags | (raspi_alive << 7) | (wifi_connected << 6); // restructure st.ntags for transmission
     }
-    const size_t need = 1 + (size_t)st.ntags * sizeof(AprilTagInfo);
-    if (msg->length >= (int)need && st.ntags > 0) {
-      memcpy(st.tags, &msg->data[1], st.ntags * sizeof(AprilTagInfo));
-    } else if (st.ntags > 0) {
-      st.ntags = 0;
-    }
-    if (st.ntags < 10) {
-      memset(&st.tags[st.ntags], 0, (10 - st.ntags) * sizeof(AprilTagInfo));
-    }
-    st.ntags = st.ntags | (raspi_alive << 7) | (wifi_connected << 6); // restructure st.ntags for transmission
   }
   updateStatusDisplayIfChanged();
 
