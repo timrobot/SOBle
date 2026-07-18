@@ -146,7 +146,8 @@ def _build_sync_read_packet(
 def _parse_sts_status_frame(frame: bytes) -> int | None:
     if len(frame) < STS_STATUS_FRAME_LEN or frame[0] != 0xFF or frame[1] != 0xFF:
         return None
-    if _sts_checksum(list(frame[2:-1])) != frame[-1]:
+    # Validate checksum using the full frame minus trailing checksum byte.
+    if _sts_checksum(list(frame[:-1])) != frame[-1]:
         return None
     return (frame[6] << 8) | frame[5]
 
