@@ -4,13 +4,30 @@
 
 *Image and Design attributed to @BIO-SS*
 
-The SO101 Platform is a four-wheeled differential-drive mobile base with two powered wheels. It reports heading, pitch, roll, and wheel encoder positions, mounts an SO101 arm, and supports an optional gripper-mounted camera for AprilTag detection or live video streaming over WiFi.
+The SO101 Platform is a BLE-controlled four-wheeled differential drive with two powered wheels. It reports heading, pitch, roll, and wheel encoder positions. It is designed to work with the SO-101 robot arm, and supports an optional gripper-mounted camera for AprilTag detection or live video streaming over WiFi.
 
-This repo provides a Python package for host-side control and teleop over BLE, with USB **leader** arm mapping. A [standalone 3D viewer](https://timrobot.github.io/SOBle/) is available to connect to your robot; remember to enable BLE in **chrome://flags**. Print files and a parts list are in [STL/](STL/) if you want to build the platform yourself.
+### Documentation 📖
+
+For the full documention, check out the [wiki](https://github.com/timrobot/SOBle/wiki/Home) which contains both the [assembly guide](https://github.com/timrobot/SOBle/wiki/Assembly-Guide) and [tutorials](https://github.com/timrobot/SOBle/wiki/Home#Tutorials) for some classical algorithms involving Apriltags.
+
+### Building the SO-101 Platform
+
+You will need to first purchase the parts located in the [Sourcing Table](#sourcing-parts). Print out the parts in the [models folder](STL/), and then proceed to the [assembly guide](https://github.com/timrobot/SOBle/wiki/Assembly-Guide).
+
+### Accessing the Viewer 📺
+
+You can access the viewer [here](https://timrobot.github.io/SOBle). It allows you do to
+
+ * ServoID flashing
+ * Calibration file generation
+ * Manual control over bluetooth
+ * Sensor debugging
 
 ---
 
 ## Install
+
+To control the robot over Python, you will need to install the SOBle package:
 
 ```bash
 pip install "soble @ git+https://github.com/timrobot/SOBle.git@master"
@@ -68,8 +85,6 @@ Required electronics cost **$150**, primarily due to the battery and charger. Op
 The **SO101 follower arm** (Feetech servos and its own controller) is not included in the table above and must be purchased separately.
 
 If you still need arm servos, order the two drive **STS3215** units from the table at the same time as the arm servos to save on shipping.
-
-Once you have printed all your parts and acquired the electronics, follow the [Assembly Guide](https://github.com/timrobot/SOBle/wiki/Assembly-Guide).
 
 ---
 
