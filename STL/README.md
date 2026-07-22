@@ -62,6 +62,7 @@
 | Front Axle Halve.stl | 4 | [Front Axle Halve.stl](KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Halve.stl) |
 | Front Axle Halve.stl | 4 | [Front Axle Halve.stl](KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Halve.stl) |
 | Front Axle Clip.stl | 2 | [Front Axle Clip.stl](KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Clip.stl) |
+| Front Wheels Grippy v2.stl | 2 | [Front Wheels Grippy v2.stl](KiloChassis/Front%20Drive/Front%20Wheels%20Grippy%20v2.stl) |
 | Front Drive Bolt.stl | 2 | [Front Drive Bolt.stl](KiloChassis/Bolts/Front%20Drive%20Bolt.stl) |
 | Arm Retainer Pin Halve.stl | 8 | [Arm Retainer Pin Halve.stl](KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Retainer%20Pin%20Halve.stl) |
 | Arm Pin Half Bracket.stl | 4 | [Arm Pin Half Bracket.stl](KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Pin%20Half%20Bracket.stl) |
