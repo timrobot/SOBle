@@ -1,0 +1,79 @@
+## Required STL Print List (VEX front wheel)
+
+> Note: This list assumes that you are using the VEX 4" Traction wheel for the front wheel. If you aren't please refer to the list at the bottom of the page. You will be required to print the wheel in TPU for the wheel to have proper grip.
+
+| STL part | Qty | Repo link |
+| ---- | --- | ---- |
+| Supported Ball Bearing.stl | 24 | [Supported Ball Bearing.stl](KiloChassis/Bearing/Supported%20Ball%20Bearing.stl) |
+| Omni Wheel Core.stl | 2 | [Omni Wheel Core.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Core.stl) |
+| Bearing Inner Ring.stl | 4 | [Bearing Inner Ring.stl](KiloChassis/Bearing/Bearing%20Inner%20Ring.stl) |
+| Ball Retainer.stl | 4 | [Ball Retainer.stl](KiloChassis/Bearing/Ball%20Retainer.stl) |
+| Roller.stl | 20 | [Roller.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Roller.stl) |
+| Omni Wheel Frame.stl | 4 | [Omni Wheel Frame.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Frame.stl) |
+| Hub Retaining Ring.stl | 4 | [Hub Retaining Ring.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Hub%20Retaining%20Ring.stl) |
+| Rear Base.stl | 2 | [Rear Base.stl](KiloChassis/Base%20Components/Rear%20Base.stl) |
+| Main Base Bolt.stl | 6 | [Main Base Bolt.stl](KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
+| Rear Deadwheel Bracket.stl | 2 | [Rear Deadwheel Bracket.stl](KiloChassis/Rear%20Deadwheel/Rear%20Deadwheel%20Bracket.stl) |
+| Rear Wheel Nut.stl | 2 | [Rear Wheel Nut.stl](KiloChassis/Rear%20Deadwheel/Rear%20Wheel%20Nut.stl) |
+| Servo Coupler.stl | 2 | [Servo Coupler.stl](KiloChassis/Front%20Drive/VEX%20Front%20Axle/Servo%20Coupler.stl) |
+| Servo Bracket Left.stl | 1 | [Servo Bracket Left.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Left.stl) |
+| Servo Bracket Right.stl | 1 | [Servo Bracket Right.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Right.stl) |
+| Arm Base.stl | 2 | [Arm Base.stl](KiloChassis/Base%20Components/Arm%20Base.stl) |
+| Wheel Bearing Bracket Left.stl | 1 | [Wheel Bearing Bracket Left.stl](KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Left.stl) |
+| Wheel Bearing Bracket Right.stl | 1 | [Wheel Bearing Bracket Right.stl](KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Right.stl) |
+| Front Axle Halve.stl | 4 | [Front Axle Halve.stl](KiloChassis/Front%20Drive/VEX%20Front%20Axle/Front%20Axle%20Halve.stl) |
+| Front Drive Bolt.stl | 2 | [Front Drive Bolt.stl](KiloChassis/Bolts/Front%20Drive%20Bolt.stl) |
+| Arm Retainer Pin Halve.stl | 8 | [Arm Retainer Pin Halve.stl](KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Retainer%20Pin%20Halve.stl) |
+| Arm Pin Half Bracket.stl | 4 | [Arm Pin Half Bracket.stl](KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Pin%20Half%20Bracket.stl) |
+| Arm Pin Mini Bracket.stl | 4 | [Arm Pin Mini Bracket.stl](KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Pin%20Mini%20Bracket.stl) |
+| Arm Pin Bolt.stl | 4 | [Arm Pin Bolt.stl](KiloChassis/Bolts/Arm%20Pin%20Bolt.stl) |
+| ESP32 Mount.stl | 1 | [ESP32 Mount.stl](KiloChassis/Base%20Components/ESP32%20Mount.stl) |
+| ESP32 Bolt.stl | 1 | [ESP32 Bolt.stl](KiloChassis/Bolts/ESP32%20Bolt.stl) |
+| Bus Adapter Bracket.stl | 1 | [Bus Adapter Bracket.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket.stl) |
+| Bus Adapter Clamping Foot.stl | 2 | [Bus Adapter Clamping Foot.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Clamping%20Foot.stl) |
+| Bus Adapter Clamp Bolt.stl | 2 | [Bus Adapter Clamp Bolt.stl](KiloChassis/Bolts/Bus%20Adapter%20Clamp%20Bolt.stl) |
+| Bus Adapter Bracket Top.stl | 1 | [Bus Adapter Bracket Top.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Top.stl) |
+| Bus Adapter Bracket Bottom.stl | 1 | [Bus Adapter Bracket Bottom.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Bottom.stl) |
+| Bus Adapter Bracket Retainer.stl | 1 | [Bus Adapter Bracket Retainer.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Retainer.stl) |
+| Bus Adapter Retainer Bolt.stl | 1 | [Bus Adapter Retainer Bolt.stl](KiloChassis/Bolts/Bus%20Adapter%20Retainer%20Bolt.stl) |
+| Battery Lock.stl | 1 | [Battery Lock.stl](KiloChassis/Base%20Components/Battery%20Lock.stl) |
+
+## Required STL Print List (TPU front wheel)
+
+| STL part | Qty | Repo link |
+| ---- | --- | ---- |
+| Supported Ball Bearing.stl | 24 | [Supported Ball Bearing.stl](KiloChassis/Bearing/Supported%20Ball%20Bearing.stl) |
+| Omni Wheel Core.stl | 2 | [Omni Wheel Core.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Core.stl) |
+| Bearing Inner Ring.stl | 4 | [Bearing Inner Ring.stl](KiloChassis/Bearing/Bearing%20Inner%20Ring.stl) |
+| Ball Retainer.stl | 4 | [Ball Retainer.stl](KiloChassis/Bearing/Ball%20Retainer.stl) |
+| Roller.stl | 20 | [Roller.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Roller.stl) |
+| Omni Wheel Frame.stl | 4 | [Omni Wheel Frame.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Frame.stl) |
+| Hub Retaining Ring.stl | 4 | [Hub Retaining Ring.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Hub%20Retaining%20Ring.stl) |
+| Rear Base.stl | 2 | [Rear Base.stl](KiloChassis/Base%20Components/Rear%20Base.stl) |
+| Main Base Bolt.stl | 6 | [Main Base Bolt.stl](KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
+| Rear Deadwheel Bracket.stl | 2 | [Rear Deadwheel Bracket.stl](KiloChassis/Rear%20Deadwheel/Rear%20Deadwheel%20Bracket.stl) |
+| Rear Wheel Nut.stl | 2 | [Rear Wheel Nut.stl](KiloChassis/Rear%20Deadwheel/Rear%20Wheel%20Nut.stl) |
+| Servo Coupler.stl | 2 | [Servo Coupler.stl](KiloChassis/Front%20Drive/Front%20Axle/Servo%20Coupler.stl) |
+| Servo Bracket Left.stl | 1 | [Servo Bracket Left.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Left.stl) |
+| Servo Bracket Right.stl | 1 | [Servo Bracket Right.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Right.stl) |
+| Arm Base.stl | 2 | [Arm Base.stl](KiloChassis/Base%20Components/Arm%20Base.stl) |
+| Wheel Bearing Bracket Left.stl | 1 | [Wheel Bearing Bracket Left.stl](KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Left.stl) |
+| Wheel Bearing Bracket Right.stl | 1 | [Wheel Bearing Bracket Right.stl](KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Right.stl) |
+| Front Axle Halve.stl | 4 | [Front Axle Halve.stl](KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Halve.stl) |
+| Front Axle Halve.stl | 4 | [Front Axle Halve.stl](KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Halve.stl) |
+| Front Axle Clip.stl | 2 | [Front Axle Clip.stl](KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Clip.stl) |
+| Front Drive Bolt.stl | 2 | [Front Drive Bolt.stl](KiloChassis/Bolts/Front%20Drive%20Bolt.stl) |
+| Arm Retainer Pin Halve.stl | 8 | [Arm Retainer Pin Halve.stl](KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Retainer%20Pin%20Halve.stl) |
+| Arm Pin Half Bracket.stl | 4 | [Arm Pin Half Bracket.stl](KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Pin%20Half%20Bracket.stl) |
+| Arm Pin Mini Bracket.stl | 4 | [Arm Pin Mini Bracket.stl](KiloChassis/Base%20Components/Arm%20Retainer/Arm%20Pin%20Mini%20Bracket.stl) |
+| Arm Pin Bolt.stl | 4 | [Arm Pin Bolt.stl](KiloChassis/Bolts/Arm%20Pin%20Bolt.stl) |
+| ESP32 Mount.stl | 1 | [ESP32 Mount.stl](KiloChassis/Base%20Components/ESP32%20Mount.stl) |
+| ESP32 Bolt.stl | 1 | [ESP32 Bolt.stl](KiloChassis/Bolts/ESP32%20Bolt.stl) |
+| Bus Adapter Bracket.stl | 1 | [Bus Adapter Bracket.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket.stl) |
+| Bus Adapter Clamping Foot.stl | 2 | [Bus Adapter Clamping Foot.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Clamping%20Foot.stl) |
+| Bus Adapter Clamp Bolt.stl | 2 | [Bus Adapter Clamp Bolt.stl](KiloChassis/Bolts/Bus%20Adapter%20Clamp%20Bolt.stl) |
+| Bus Adapter Bracket Top.stl | 1 | [Bus Adapter Bracket Top.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Top.stl) |
+| Bus Adapter Bracket Bottom.stl | 1 | [Bus Adapter Bracket Bottom.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Bottom.stl) |
+| Bus Adapter Bracket Retainer.stl | 1 | [Bus Adapter Bracket Retainer.stl](KiloChassis/Bus%20Adapter/Bus%20Adapter%20Bracket%20Retainer.stl) |
+| Bus Adapter Retainer Bolt.stl | 1 | [Bus Adapter Retainer Bolt.stl](KiloChassis/Bolts/Bus%20Adapter%20Retainer%20Bolt.stl) |
+| Battery Lock.stl | 1 | [Battery Lock.stl](KiloChassis/Base%20Components/Battery%20Lock.stl) |
