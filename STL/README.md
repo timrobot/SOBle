@@ -11,14 +11,14 @@
 | Roller.stl | 20 | [Roller.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Roller.stl) |
 | Omni Wheel Frame.stl | 4 | [Omni Wheel Frame.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Frame.stl) |
 | Hub Retaining Ring.stl | 4 | [Hub Retaining Ring.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Hub%20Retaining%20Ring.stl) |
-| Rear Base.stl | 2 | [Rear Base.stl](KiloChassis/Base%20Components/Rear%20Base.stl) |
+| Rear Base.stl | 1 | [Rear Base.stl](KiloChassis/Base%20Components/Rear%20Base.stl) |
 | Main Base Bolt.stl | 6 | [Main Base Bolt.stl](KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
 | Rear Deadwheel Bracket.stl | 2 | [Rear Deadwheel Bracket.stl](KiloChassis/Rear%20Deadwheel/Rear%20Deadwheel%20Bracket.stl) |
 | Rear Wheel Nut.stl | 2 | [Rear Wheel Nut.stl](KiloChassis/Rear%20Deadwheel/Rear%20Wheel%20Nut.stl) |
 | Servo Coupler.stl | 2 | [Servo Coupler.stl](KiloChassis/Front%20Drive/VEX%20Front%20Axle/Servo%20Coupler.stl) |
 | Servo Bracket Left.stl | 1 | [Servo Bracket Left.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Left.stl) |
 | Servo Bracket Right.stl | 1 | [Servo Bracket Right.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Right.stl) |
-| Arm Base.stl | 2 | [Arm Base.stl](KiloChassis/Base%20Components/Arm%20Base.stl) |
+| Arm Base.stl | 1 | [Arm Base.stl](KiloChassis/Base%20Components/Arm%20Base.stl) |
 | Wheel Bearing Bracket Left.stl | 1 | [Wheel Bearing Bracket Left.stl](KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Left.stl) |
 | Wheel Bearing Bracket Right.stl | 1 | [Wheel Bearing Bracket Right.stl](KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Right.stl) |
 | Front Axle Halve.stl | 4 | [Front Axle Halve.stl](KiloChassis/Front%20Drive/VEX%20Front%20Axle/Front%20Axle%20Halve.stl) |
@@ -49,14 +49,14 @@
 | Roller.stl | 20 | [Roller.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Roller.stl) |
 | Omni Wheel Frame.stl | 4 | [Omni Wheel Frame.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Frame.stl) |
 | Hub Retaining Ring.stl | 4 | [Hub Retaining Ring.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Hub%20Retaining%20Ring.stl) |
-| Rear Base.stl | 2 | [Rear Base.stl](KiloChassis/Base%20Components/Rear%20Base.stl) |
+| Rear Base.stl | 1 | [Rear Base.stl](KiloChassis/Base%20Components/Rear%20Base.stl) |
 | Main Base Bolt.stl | 6 | [Main Base Bolt.stl](KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
 | Rear Deadwheel Bracket.stl | 2 | [Rear Deadwheel Bracket.stl](KiloChassis/Rear%20Deadwheel/Rear%20Deadwheel%20Bracket.stl) |
 | Rear Wheel Nut.stl | 2 | [Rear Wheel Nut.stl](KiloChassis/Rear%20Deadwheel/Rear%20Wheel%20Nut.stl) |
 | Servo Coupler.stl | 2 | [Servo Coupler.stl](KiloChassis/Front%20Drive/Front%20Axle/Servo%20Coupler.stl) |
 | Servo Bracket Left.stl | 1 | [Servo Bracket Left.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Left.stl) |
 | Servo Bracket Right.stl | 1 | [Servo Bracket Right.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Right.stl) |
-| Arm Base.stl | 2 | [Arm Base.stl](KiloChassis/Base%20Components/Arm%20Base.stl) |
+| Arm Base.stl | 1 | [Arm Base.stl](KiloChassis/Base%20Components/Arm%20Base.stl) |
 | Wheel Bearing Bracket Left.stl | 1 | [Wheel Bearing Bracket Left.stl](KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Left.stl) |
 | Wheel Bearing Bracket Right.stl | 1 | [Wheel Bearing Bracket Right.stl](KiloChassis/Front%20Drive/Wheel%20Bearing%20Bracket%20Right.stl) |
 | Front Axle Halve.stl | 4 | [Front Axle Halve.stl](KiloChassis/Front%20Drive/Front%20Axle/Front%20Axle%20Halve.stl) |
