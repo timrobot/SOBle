@@ -9,7 +9,7 @@
 | Bearing Inner Ring.stl | 4 | [Bearing Inner Ring.stl](KiloChassis/Bearing/Bearing%20Inner%20Ring.stl) |
 | Ball Retainer.stl | 4 | [Ball Retainer.stl](KiloChassis/Bearing/Ball%20Retainer.stl) |
 | Roller.stl | 20 | [Roller.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Roller.stl) |
-| Omni Wheel Frame.stl | 4 | [Omni Wheel Frame.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Frame.stl) |
+| Omni Wheel Frame.stl | 8 | [Omni Wheel Frame.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Frame.stl) |
 | Hub Retaining Ring.stl | 4 | [Hub Retaining Ring.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Hub%20Retaining%20Ring.stl) |
 | Rear Base.stl | 1 | [Rear Base.stl](KiloChassis/Base%20Components/Rear%20Base.stl) |
 | Main Base Bolt.stl | 6 | [Main Base Bolt.stl](KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
@@ -47,7 +47,7 @@
 | Bearing Inner Ring.stl | 4 | [Bearing Inner Ring.stl](KiloChassis/Bearing/Bearing%20Inner%20Ring.stl) |
 | Ball Retainer.stl | 4 | [Ball Retainer.stl](KiloChassis/Bearing/Ball%20Retainer.stl) |
 | Roller.stl | 20 | [Roller.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Roller.stl) |
-| Omni Wheel Frame.stl | 4 | [Omni Wheel Frame.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Frame.stl) |
+| Omni Wheel Frame.stl | 8 | [Omni Wheel Frame.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Omni%20Wheel%20Frame.stl) |
 | Hub Retaining Ring.stl | 4 | [Hub Retaining Ring.stl](KiloChassis/Rear%20Deadwheel/Omni%20Wheel/Hub%20Retaining%20Ring.stl) |
 | Rear Base.stl | 1 | [Rear Base.stl](KiloChassis/Base%20Components/Rear%20Base.stl) |
 | Main Base Bolt.stl | 6 | [Main Base Bolt.stl](KiloChassis/Bolts/Main%20Base%20Bolt.stl) |
