@@ -17,6 +17,7 @@
 | Rear Deadwheel Bracket | 2 | [Rear Deadwheel Bracket.stl](KiloChassis/Rear%20Deadwheel/Rear%20Deadwheel%20Bracket.stl) |
 | Rear Wheel Nut | 2 | [Rear Wheel Nut.stl](KiloChassis/Rear%20Deadwheel/Rear%20Wheel%20Nut.stl) |
 | Servo Coupler | 2 | [Servo Coupler.stl](KiloChassis/Front%20Drive/VEX%20Front%20Axle/Servo%20Coupler.stl) |
+| Servo Clamp | 2 | [Servo Clamp.stl](KiloChassis/Front%20Drive/Servo%20Clamp.stl) |
 | Servo Bracket Left | 1 | [Servo Bracket Left.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Left.stl) |
 | Servo Bracket Right | 1 | [Servo Bracket Right.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Right.stl) |
 | Arm Base | 1 | [Arm Base.stl](KiloChassis/Base%20Components/Arm%20Base.stl) |
@@ -56,6 +57,7 @@
 | Rear Deadwheel Bracket | 2 | [Rear Deadwheel Bracket.stl](KiloChassis/Rear%20Deadwheel/Rear%20Deadwheel%20Bracket.stl) |
 | Rear Wheel Nut | 2 | [Rear Wheel Nut.stl](KiloChassis/Rear%20Deadwheel/Rear%20Wheel%20Nut.stl) |
 | Servo Coupler | 2 | [Servo Coupler.stl](KiloChassis/Front%20Drive/Front%20Axle/Servo%20Coupler.stl) |
+| Servo Clamp | 2 | [Servo Clamp.stl](KiloChassis/Front%20Drive/Servo%20Clamp.stl) |
 | Servo Bracket Left | 1 | [Servo Bracket Left.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Left.stl) |
 | Servo Bracket Right | 1 | [Servo Bracket Right.stl](KiloChassis/Front%20Drive/Servo%20Bracket%20Right.stl) |
 | Arm Base | 1 | [Arm Base.stl](KiloChassis/Base%20Components/Arm%20Base.stl) |
