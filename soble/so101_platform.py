@@ -668,6 +668,8 @@ def _ble_worker(
             enc,
             arm_raw,
             quat,
+            quat0,
+            quat0_valid,
             ntags,
             tag_blob,
             raspi,
