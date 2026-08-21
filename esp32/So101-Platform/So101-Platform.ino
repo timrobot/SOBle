@@ -34,9 +34,19 @@ Arduino_GFX *gfx = new Arduino_ST7789(bus, 42 /* RST */, 1 /* rotation: 90° CW 
 #define ARM_BAUD 1000000
 
 // BLE GATT
-static const char *kName = "Capybara";
+static const char *kBleAdj[] = {"Soft", "Tiny", "Wee", "Warm", "Chub", "Calm", "Big"};
+static const char *kBleNoun[] = {"Capybara", "Pika", "Panda", "Seal", "Koala", "Hedgehog"};
+static char bleName[32];
 static const char *kService = "4fafc201-1fb5-459e-8fcc-c5c9c331d914";
 static const char *kChar = "beb5483e-36e1-4688-b7f2-e6a6a6d74324";
+
+static void chooseBleName() {
+  const size_t nAdj = sizeof(kBleAdj) / sizeof(kBleAdj[0]);
+  const size_t nNoun = sizeof(kBleNoun) / sizeof(kBleNoun[0]);
+  const char *adj = kBleAdj[esp_random() % nAdj];
+  const char *noun = kBleNoun[esp_random() % nNoun];
+  snprintf(bleName, sizeof(bleName), "%s%s", adj, noun);
+}
 
 BLECharacteristic *bleCh;
 static bool bleClientConnected = false;
@@ -492,10 +502,12 @@ static void initDisplay() {
   gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
   gfx->setTextSize(3);
   gfx->setCursor(8, 32);
-  gfx->println(kName);
+  gfx->println(bleName);
 }
 
 void setup() {
+  chooseBleName();
+
   gfx->begin(40000000);
   initDisplay();
   updateStatusDisplayIfChanged();
@@ -511,7 +523,7 @@ void setup() {
   st.quat[0] = 1000;
   st.quat[1] = st.quat[2] = st.quat[3] = 0;
 
-  BLEDevice::init(kName);
+  BLEDevice::init(bleName);
   BLEDevice::setMTU(247);
 
   BLEServer *srv = BLEDevice::createServer();
