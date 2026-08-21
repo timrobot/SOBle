@@ -268,7 +268,7 @@ static void applyReadPositions(const std::vector<uint8_t> &ids, const std::vecto
   }
 }
 
-static void packArm12(const uint16_t in[kArmJointCount], uint8_t packed[9]) {
+static void packArm12(const uint16_t *in, uint8_t packed[9]) {
   memset(packed, 0, 9);
   int byteidx = 0;
   bool insert2 = true;
@@ -291,7 +291,7 @@ static void packWheelEnc12(uint16_t left, uint16_t right, uint8_t out[3]) {
   out[2] = (uint8_t)(right >> 4);
 }
 
-static void unpackArm12(const uint8_t packed[9], uint16_t out[kArmJointCount]) {
+static void unpackArm12(const uint8_t packed[9], uint16_t *out) {
   int byteidx = 0;
   bool extract2 = true;
   uint16_t a, b = 0;
