@@ -1,6 +1,7 @@
 #include "STSDriver.h"
 #include <string.h>
 
+static const uint8_t INST_PING = 0x01;
 static const uint8_t INST_SYNC_READ = 0x82;
 static const uint8_t INST_SYNC_WRITE = 0x83;
 static const uint8_t REG_TORQUE_ENABLE = 40;
@@ -12,17 +13,20 @@ static const uint8_t REG_GOAL_POSITION = 0x2A;
 static const uint8_t REG_GOAL_SPEED_L = 46;
 static const uint8_t ARM_DATA_LEN = 2;
 static const uint8_t RESP_FRAME_LEN = 8;
+static const uint8_t PING_RESP_LEN = 6;
 
 static const uint32_t kRxIdleUs = 400;
 static const uint32_t kRxMaxUs = 8000;
+static const uint32_t kPingRxMaxUs = 2000;
 static constexpr uint8_t kWheelAcceleration = 0;
+/** Practical FeeTech SYNC_* packet limit (IDs + framing). */
+static constexpr size_t kMaxIdsPerPacket = 20;
 
 STSDriver::STSDriver(uint8_t uartNum, int rxPin, int txPin, uint32_t baud)
     : _serial(uartNum),
       _rxPin(rxPin),
       _txPin(txPin),
       _baud(baud),
-      _syncWriteTxLen(0),
       _presentValid(false),
       _halted(false),
       _wheelVelocityModeReady(false) {}
@@ -34,8 +38,8 @@ void STSDriver::begin() {
   }
 }
 
-uint8_t STSDriver::listSize(std::initializer_list<uint8_t> ids) {
-  return (uint8_t)ids.size();
+bool STSDriver::idsUsable(const std::vector<uint8_t> &ids) const {
+  return !ids.empty() && ids.size() <= kMaxIdsPerPacket;
 }
 
 uint8_t STSDriver::checksum(const uint8_t *bodyFromId, size_t n) {
@@ -86,26 +90,21 @@ int STSDriver::findPosition(const uint8_t *buf, size_t buflen, uint8_t id) {
   return -1;
 }
 
-bool STSDriver::readAngles(std::initializer_list<uint8_t> ids, int16_t *out) {
-  const uint8_t count = listSize(ids);
-  if (count == 0 || count > kMaxServos || out == nullptr) {
+bool STSDriver::readAngles(const std::vector<uint8_t> &ids, std::vector<int16_t> &out) {
+  if (!idsUsable(ids)) {
     return false;
   }
-
-  uint8_t idList[kMaxServos];
-  uint8_t idx = 0;
-  for (uint8_t id : ids) {
-    idList[idx++] = id;
-  }
-
-  uint8_t tx[32];
-  const size_t txLen = buildSyncReadPacket(tx, idList, count);
+  const uint8_t count = (uint8_t)ids.size();
   const size_t expectRx = (size_t)count * RESP_FRAME_LEN;
+
+  std::vector<uint8_t> tx(32 + count);
+  const size_t txLen = buildSyncReadPacket(tx.data(), ids.data(), count);
+  _rxBuf.assign(expectRx, 0);
 
   while (_serial.available() > 0) {
     _serial.read();
   }
-  _serial.write(tx, txLen);
+  _serial.write(tx.data(), txLen);
   _serial.flush();
 
   size_t n = 0;
@@ -127,8 +126,9 @@ bool STSDriver::readAngles(std::initializer_list<uint8_t> ids, int16_t *out) {
     return false;
   }
 
+  out.resize(count);
   for (uint8_t i = 0; i < count; i++) {
-    const int pos = findPosition(_rxBuf, n, idList[i]);
+    const int pos = findPosition(_rxBuf.data(), n, ids[i]);
     if (pos < 0) {
       return false;
     }
@@ -218,137 +218,142 @@ void STSDriver::syncWriteRaw(const uint8_t *packet, size_t len) {
   _serial.flush();
 }
 
-void STSDriver::halt(std::initializer_list<uint8_t> ids) {
-  const uint8_t count = listSize(ids);
-  if (count == 0 || count > kMaxServos) {
+void STSDriver::halt(const std::vector<uint8_t> &ids) {
+  if (!idsUsable(ids)) {
     return;
   }
-
-  uint8_t idList[kMaxServos];
-  uint16_t zero[kMaxServos] = {0};
-  uint8_t idx = 0;
-  for (uint8_t id : ids) {
-    idList[idx++] = id;
-  }
-
+  const uint8_t count = (uint8_t)ids.size();
+  std::vector<uint16_t> zero(count, 0);
+  _syncWriteTx.resize(8 + 3 * count);
   _halted = true;
-  _syncWriteTxLen = buildSyncWriteSpeedPacket(_syncWriteTx, idList, count, zero);
-  syncWriteRaw(_syncWriteTx, _syncWriteTxLen);
+  const size_t len = buildSyncWriteSpeedPacket(_syncWriteTx.data(), ids.data(), count, zero.data());
+  syncWriteRaw(_syncWriteTx.data(), len);
 }
 
-void STSDriver::setAngles(const uint8_t *ids, uint8_t count, const int16_t *raw) {
-  if (count == 0 || count > kMaxServos || ids == nullptr || raw == nullptr) {
+void STSDriver::setAngles(const std::vector<uint8_t> &ids, const std::vector<int16_t> &raw) {
+  if (!idsUsable(ids) || raw.size() != ids.size()) {
     return;
   }
-
-  uint16_t goals[kMaxServos];
+  const uint8_t count = (uint8_t)ids.size();
+  std::vector<uint16_t> goals(count);
   for (uint8_t i = 0; i < count; i++) {
     goals[i] = (uint16_t)(raw[i] & 0x0FFF);
   }
 
+  _syncWriteTx.resize(8 + 5 * count);
   _halted = false;
-  _syncWriteTxLen = buildSyncWritePositionPacket(_syncWriteTx, ids, count, goals);
-  syncWriteRaw(_syncWriteTx, _syncWriteTxLen);
+  const size_t len =
+      buildSyncWritePositionPacket(_syncWriteTx.data(), ids.data(), count, goals.data());
+  syncWriteRaw(_syncWriteTx.data(), len);
 }
 
-void STSDriver::setAngles(std::initializer_list<uint8_t> ids, const int16_t *raw) {
-  const uint8_t count = listSize(ids);
-  if (count == 0 || count > kMaxServos || raw == nullptr) {
+void STSDriver::releaseTorque(const std::vector<uint8_t> &ids) {
+  if (!idsUsable(ids)) {
     return;
   }
-
-  uint8_t idList[kMaxServos];
-  uint8_t idx = 0;
-  for (uint8_t id : ids) {
-    idList[idx++] = id;
-  }
-  setAngles(idList, count, raw);
+  const uint8_t count = (uint8_t)ids.size();
+  std::vector<uint8_t> off(count, 0);
+  _syncWriteTx.resize(8 + 2 * count);
+  const size_t len =
+      buildSyncWriteBytePacket(_syncWriteTx.data(), ids.data(), count, REG_TORQUE_ENABLE, off.data());
+  syncWriteRaw(_syncWriteTx.data(), len);
 }
 
-void STSDriver::releaseTorque(const uint8_t *ids, uint8_t count) {
-  if (count == 0 || count > kMaxServos || ids == nullptr) {
+void STSDriver::engageTorque(const std::vector<uint8_t> &ids) {
+  if (!idsUsable(ids)) {
     return;
   }
-
-  uint8_t off[kMaxServos] = {0};
-  _syncWriteTxLen = buildSyncWriteBytePacket(_syncWriteTx, ids, count, REG_TORQUE_ENABLE, off);
-  syncWriteRaw(_syncWriteTx, _syncWriteTxLen);
+  const uint8_t count = (uint8_t)ids.size();
+  std::vector<uint8_t> on(count, 1);
+  _syncWriteTx.resize(8 + 2 * count);
+  const size_t len =
+      buildSyncWriteBytePacket(_syncWriteTx.data(), ids.data(), count, REG_TORQUE_ENABLE, on.data());
+  syncWriteRaw(_syncWriteTx.data(), len);
 }
 
-void STSDriver::engageTorque(const uint8_t *ids, uint8_t count) {
-  if (count == 0 || count > kMaxServos || ids == nullptr) {
-    return;
-  }
+bool STSDriver::ping(uint8_t id) {
+  // TX: FF FF ID 02 01 CHK
+  uint8_t tx[6];
+  tx[0] = 0xFF;
+  tx[1] = 0xFF;
+  tx[2] = id;
+  tx[3] = 0x02;
+  tx[4] = INST_PING;
+  tx[5] = checksum(&tx[2], 3);
 
-  uint8_t on[kMaxServos];
-  for (uint8_t i = 0; i < count; i++) {
-    on[i] = 1;
+  while (_serial.available() > 0) {
+    _serial.read();
   }
-  _syncWriteTxLen = buildSyncWriteBytePacket(_syncWriteTx, ids, count, REG_TORQUE_ENABLE, on);
-  syncWriteRaw(_syncWriteTx, _syncWriteTxLen);
+  _serial.write(tx, sizeof(tx));
+  _serial.flush();
+
+  uint8_t rx[PING_RESP_LEN];
+  size_t n = 0;
+  const uint32_t t0 = micros();
+  uint32_t lastByteUs = 0;
+  while ((uint32_t)(micros() - t0) < kPingRxMaxUs) {
+    while (_serial.available() > 0 && n < PING_RESP_LEN) {
+      rx[n++] = (uint8_t)_serial.read();
+      lastByteUs = micros();
+    }
+    if (n >= PING_RESP_LEN) {
+      break;
+    }
+    if (n > 0 && lastByteUs > 0 && (uint32_t)(micros() - lastByteUs) > kRxIdleUs) {
+      break;
+    }
+  }
+  if (n < PING_RESP_LEN) {
+    return false;
+  }
+  // RX: FF FF ID 02 ERR CHK
+  if (rx[0] != 0xFF || rx[1] != 0xFF || rx[2] != id || rx[3] != 0x02) {
+    return false;
+  }
+  return checksum(&rx[2], 3) == rx[5];
 }
 
-void STSDriver::enableVelocityMode(const uint8_t *ids, uint8_t count) {
-  if (count == 0 || count > kMaxServos || ids == nullptr) {
+void STSDriver::enableVelocityMode(const std::vector<uint8_t> &ids) {
+  if (!idsUsable(ids)) {
     return;
   }
+  const uint8_t count = (uint8_t)ids.size();
+  std::vector<uint8_t> mode(count, MODE_VELOCITY);
 
-  uint8_t mode[kMaxServos];
-  for (uint8_t i = 0; i < count; i++) {
-    mode[i] = MODE_VELOCITY;
-  }
-
-  releaseTorque(ids, count);
+  releaseTorque(ids);
   delay(20);
-  _syncWriteTxLen = buildSyncWriteBytePacket(_syncWriteTx, ids, count, REG_MODE, mode);
-  syncWriteRaw(_syncWriteTx, _syncWriteTxLen);
+  _syncWriteTx.resize(8 + 2 * count);
+  size_t len =
+      buildSyncWriteBytePacket(_syncWriteTx.data(), ids.data(), count, REG_MODE, mode.data());
+  syncWriteRaw(_syncWriteTx.data(), len);
   delay(20);
 
-  uint8_t accel[kMaxServos];
-  for (uint8_t i = 0; i < count; i++) {
-    accel[i] = kWheelAcceleration;
-  }
-  _syncWriteTxLen = buildSyncWriteBytePacket(_syncWriteTx, ids, count, REG_ACCELERATION, accel);
-  syncWriteRaw(_syncWriteTx, _syncWriteTxLen);
+  std::vector<uint8_t> accel(count, kWheelAcceleration);
+  len = buildSyncWriteBytePacket(_syncWriteTx.data(), ids.data(), count, REG_ACCELERATION,
+                                 accel.data());
+  syncWriteRaw(_syncWriteTx.data(), len);
 
-  engageTorque(ids, count);
+  engageTorque(ids);
   _wheelVelocityModeReady = true;
 }
 
-void STSDriver::enableVelocityMode(std::initializer_list<uint8_t> ids) {
-  const uint8_t count = listSize(ids);
-  if (count == 0 || count > kMaxServos) {
+void STSDriver::setSpeed(const std::vector<uint8_t> &ids, const std::vector<int16_t> &raw) {
+  if (!idsUsable(ids) || raw.size() != ids.size()) {
     return;
   }
-
-  uint8_t idList[kMaxServos];
-  uint8_t idx = 0;
-  for (uint8_t id : ids) {
-    idList[idx++] = id;
-  }
-  enableVelocityMode(idList, count);
-}
-
-void STSDriver::setSpeed(std::initializer_list<uint8_t> ids, const int16_t *raw) {
-  const uint8_t count = listSize(ids);
-  if (count == 0 || count > kMaxServos || raw == nullptr) {
-    return;
-  }
-
-  uint8_t idList[kMaxServos];
-  uint16_t speeds[kMaxServos];
-  uint8_t idx = 0;
-  for (uint8_t id : ids) {
-    idList[idx] = id;
-    speeds[idx] = (uint16_t)raw[idx];
-    idx++;
+  const uint8_t count = (uint8_t)ids.size();
+  std::vector<uint16_t> speeds(count);
+  for (uint8_t i = 0; i < count; i++) {
+    speeds[i] = (uint16_t)raw[i];
   }
 
   if (!_wheelVelocityModeReady) {
-    enableVelocityMode(idList, count);
+    enableVelocityMode(ids);
   }
 
+  _syncWriteTx.resize(8 + 3 * count);
   _halted = false;
-  _syncWriteTxLen = buildSyncWriteSpeedPacket(_syncWriteTx, idList, count, speeds);
-  syncWriteRaw(_syncWriteTx, _syncWriteTxLen);
+  const size_t len =
+      buildSyncWriteSpeedPacket(_syncWriteTx.data(), ids.data(), count, speeds.data());
+  syncWriteRaw(_syncWriteTx.data(), len);
 }

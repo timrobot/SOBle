@@ -7,6 +7,7 @@
 #include <BLE2902.h>
 #include <math.h>
 #include <string.h>
+#include <vector>
 
 #include "STSDriver.h"
 #include "HostSerial.h"
@@ -91,8 +92,7 @@ static uint8_t raspi_alive = 0;
 static uint8_t wifi_connected = 0;
 static uint8_t disp_raspi_alive = 0xFF;
 static uint8_t disp_wifi_connected = 0xFF;
-static uint8_t sts_present = 0;
-static uint8_t disp_sts_present = 0xFF;
+static uint8_t disp_sts_online_mask = 0xFF;
 
 static constexpr int16_t kDispStatusPiY = 100;
 static constexpr int16_t kDispStatusWifiY = 124;
@@ -103,9 +103,23 @@ STSDriver sts(2, ARM_RX, ARM_TX, ARM_BAUD);
 static bool stsHaltSent = false;
 static bool wheelVelocityPrimed = false;
 static uint8_t s_armTorqueMask = 0; // which arm joints currently have torque enabled
-static uint16_t gArmRawPos[STSDriver::kArmJointCount];
-static int16_t gServoReadPos[STSDriver::kMaxServos];
-static uint16_t gWheelRawPos[2] = {0, 0};
+
+/** Sketch-level STS topology (may change at runtime). */
+static constexpr uint8_t kMaxServos = 8;
+static constexpr uint8_t kArmJointCount = 6;
+static constexpr uint8_t kWheelCount = 2;
+static std::vector<uint8_t> gAllServoIds = {1, 2, 3, 4, 5, 6, 7, 8};
+static std::vector<uint8_t> gArmIds = {1, 2, 3, 4, 5, 6};
+static std::vector<uint8_t> gWheelIds = {7, 8};
+/** IDs that currently answer PING (subset of gAllServoIds). */
+static std::vector<uint8_t> gOnlineIds;
+/** bit0 = ID1 … bit7 = ID8 */
+static uint8_t gOnlineMask = 0;
+static size_t gPingScanIndex = 0;
+
+static uint16_t gArmRawPos[kArmJointCount];
+static std::vector<int16_t> gServoReadPos;
+static uint16_t gWheelRawPos[kWheelCount] = {0, 0};
 
 static constexpr float MADGWICK_BETA = 0.06f;
 Madgwick imuFilter(MADGWICK_BETA);
@@ -174,11 +188,81 @@ struct CbChar : BLECharacteristicCallbacks {
 static CbServer cbServer;
 static CbChar cbChar;
 
-static void packArm12(const uint16_t in[STSDriver::kArmJointCount], uint8_t packed[9]) {
+static void rebuildOnlineIdsFromMask() {
+  gOnlineIds.clear();
+  for (uint8_t id : gAllServoIds) {
+    if (id >= 1 && id <= kMaxServos && (gOnlineMask & (1u << (id - 1)))) {
+      gOnlineIds.push_back(id);
+    }
+  }
+}
+
+static bool isServoOnline(uint8_t id) {
+  return id >= 1 && id <= kMaxServos && (gOnlineMask & (1u << (id - 1))) != 0;
+}
+
+static void setServoOnline(uint8_t id, bool online) {
+  if (id < 1 || id > kMaxServos) {
+    return;
+  }
+  const uint8_t bit = (uint8_t)(1u << (id - 1));
+  if (online) {
+    gOnlineMask = (uint8_t)(gOnlineMask | bit);
+  } else {
+    gOnlineMask = (uint8_t)(gOnlineMask & ~bit);
+  }
+}
+
+static std::vector<uint8_t> filterOnline(const std::vector<uint8_t> &ids) {
+  std::vector<uint8_t> out;
+  out.reserve(ids.size());
+  for (uint8_t id : ids) {
+    if (isServoOnline(id)) {
+      out.push_back(id);
+    }
+  }
+  return out;
+}
+
+static void scanAllServosOnline() {
+  gOnlineMask = 0;
+  for (uint8_t id : gAllServoIds) {
+    setServoOnline(id, sts.ping(id));
+  }
+  rebuildOnlineIdsFromMask();
+}
+
+/** Round-robin PING of one candidate ID from gAllServoIds. */
+static void pingNextServoPresence() {
+  if (gAllServoIds.empty()) {
+    return;
+  }
+  const uint8_t id = gAllServoIds[gPingScanIndex % gAllServoIds.size()];
+  gPingScanIndex++;
+  setServoOnline(id, sts.ping(id));
+  rebuildOnlineIdsFromMask();
+}
+
+static void applyReadPositions(const std::vector<uint8_t> &ids, const std::vector<int16_t> &pos) {
+  const size_t n = ids.size() < pos.size() ? ids.size() : pos.size();
+  for (size_t i = 0; i < n; i++) {
+    const uint8_t id = ids[i];
+    const uint16_t raw = (uint16_t)(pos[i] & 0x0FFF);
+    if (id >= 1 && id <= kArmJointCount) {
+      gArmRawPos[id - 1] = raw;
+    } else if (id == 7) {
+      gWheelRawPos[0] = raw;
+    } else if (id == 8) {
+      gWheelRawPos[1] = raw;
+    }
+  }
+}
+
+static void packArm12(const uint16_t in[kArmJointCount], uint8_t packed[9]) {
   memset(packed, 0, 9);
   int byteidx = 0;
   bool insert2 = true;
-  for (int i = 0; i < STSDriver::kArmJointCount; i++) {
+  for (int i = 0; i < kArmJointCount; i++) {
     const uint16_t v = in[i];
     if (insert2) {
       packed[byteidx++] = (uint8_t)(v & 0xFF);
@@ -197,11 +281,11 @@ static void packWheelEnc12(uint16_t left, uint16_t right, uint8_t out[3]) {
   out[2] = (uint8_t)(right >> 4);
 }
 
-static void unpackArm12(const uint8_t packed[9], uint16_t out[STSDriver::kArmJointCount]) {
+static void unpackArm12(const uint8_t packed[9], uint16_t out[kArmJointCount]) {
   int byteidx = 0;
   bool extract2 = true;
   uint16_t a, b = 0;
-  for (int i = 0; i < STSDriver::kArmJointCount; i++) {
+  for (int i = 0; i < kArmJointCount; i++) {
     a = packed[byteidx++];
     if (extract2) {
       b = packed[byteidx++];
@@ -220,37 +304,40 @@ static void driveArmJointsFromTargets() {
   const uint8_t wantMask = targets.enabled & kArmEnableMask;
   const uint8_t engageMask = (uint8_t)(wantMask & ~s_armTorqueMask);
 
-  uint8_t releaseIds[STSDriver::kArmJointCount];
-  uint8_t engageIds[STSDriver::kArmJointCount];
-  uint8_t driveIds[STSDriver::kArmJointCount];
-  int16_t drivePos[STSDriver::kArmJointCount];
-  uint8_t nRelease = 0;
-  uint8_t nEngage = 0;
-  uint8_t nDrive = 0;
+  std::vector<uint8_t> releaseIds;
+  std::vector<uint8_t> engageIds;
+  std::vector<uint8_t> driveIds;
+  std::vector<int16_t> drivePos;
+  releaseIds.reserve(kArmJointCount);
+  engageIds.reserve(kArmJointCount);
+  driveIds.reserve(kArmJointCount);
+  drivePos.reserve(kArmJointCount);
 
-  for (uint8_t i = 0; i < STSDriver::kArmJointCount; i++) {
+  for (uint8_t i = 0; i < kArmJointCount; i++) {
     const uint8_t bit = (uint8_t)(1u << i);
     const uint8_t id = (uint8_t)(i + 1);
+    if (!isServoOnline(id)) {
+      continue;
+    }
     if (engageMask & bit) {
-      engageIds[nEngage++] = id;
+      engageIds.push_back(id);
     }
     if (wantMask & bit) {
-      driveIds[nDrive] = id;
-      drivePos[nDrive] = (int16_t)gArmRawPos[i];
-      nDrive++;
+      driveIds.push_back(id);
+      drivePos.push_back((int16_t)gArmRawPos[i]);
     } else {
-      releaseIds[nRelease++] = id;
+      releaseIds.push_back(id);
     }
   }
 
-  if (nRelease > 0) {
-    sts.releaseTorque(releaseIds, nRelease);
+  if (!releaseIds.empty()) {
+    sts.releaseTorque(releaseIds);
   }
-  if (nEngage > 0) {
-    sts.engageTorque(engageIds, nEngage);
+  if (!engageIds.empty()) {
+    sts.engageTorque(engageIds);
   }
-  if (nDrive > 0) {
-    sts.setAngles(driveIds, nDrive, drivePos);
+  if (!driveIds.empty()) {
+    sts.setAngles(driveIds, drivePos);
   }
 
   s_armTorqueMask = wantMask;
@@ -265,13 +352,27 @@ static int16_t wheelSpeedToSts(int8_t speed) {
 }
 
 static void driveWheelVelocityFromTargets() {
+  const std::vector<uint8_t> onlineWheels = filterOnline(gWheelIds);
+  if (onlineWheels.empty()) {
+    return;
+  }
   if (!wheelVelocityPrimed && (targets.left != 0 || targets.right != 0)) {
     // setup() may run before servo power is up; re-enter velocity mode on first drive.
-    sts.enableVelocityMode({7, 8});
+    sts.enableVelocityMode(onlineWheels);
     wheelVelocityPrimed = true;
   }
-  const int16_t wheelSpeed[2] = {wheelSpeedToSts(targets.left), wheelSpeedToSts(targets.right)};
-  sts.setSpeed({7, 8}, wheelSpeed);
+  std::vector<int16_t> wheelSpeed;
+  wheelSpeed.reserve(onlineWheels.size());
+  for (uint8_t id : onlineWheels) {
+    if (id == 7) {
+      wheelSpeed.push_back(wheelSpeedToSts(targets.left));
+    } else if (id == 8) {
+      wheelSpeed.push_back(wheelSpeedToSts(targets.right));
+    }
+  }
+  if (wheelSpeed.size() == onlineWheels.size()) {
+    sts.setSpeed(onlineWheels, wheelSpeed);
+  }
 }
 
 static bool isBleActive(unsigned long now) {
@@ -332,16 +433,36 @@ static void drawStatusLine(int16_t y, const char *label, bool ok) {
   }
 }
 
-static void drawStsStatusLine(int16_t y, bool found) {
-  gfx->fillRect(8, y, 224, kDispStatusLineH, RGB565_BLACK);
+static void drawStsStatusLine(int16_t y, uint8_t onlineMask) {
+  gfx->fillRect(8, y, 224, kDispStatusLineH * 2, RGB565_BLACK);
   gfx->setTextSize(2);
   gfx->setCursor(8, y);
-  if (found) {
+  const bool any = onlineMask != 0;
+  if (any) {
     gfx->setTextColor(RGB565(0, 255, 0), RGB565_BLACK);
     gfx->println("STS found");
   } else {
     gfx->setTextColor(RGB565_DARKGREY, RGB565_BLACK);
     gfx->println("STS missing");
+  }
+
+  gfx->setTextSize(1);
+  gfx->setCursor(8, y + kDispStatusLineH);
+  if (!any) {
+    gfx->setTextColor(RGB565_DARKGREY, RGB565_BLACK);
+    gfx->print("-");
+    return;
+  }
+  gfx->setTextColor(RGB565(0, 255, 0), RGB565_BLACK);
+  bool first = true;
+  for (uint8_t id = 1; id <= kMaxServos; id++) {
+    if (onlineMask & (1u << (id - 1))) {
+      if (!first) {
+        gfx->print(' ');
+      }
+      gfx->print(id);
+      first = false;
+    }
   }
 }
 
@@ -354,9 +475,9 @@ static void updateStatusDisplayIfChanged() {
     disp_wifi_connected = wifi_connected;
     drawStatusLine(kDispStatusWifiY, "WiFi", wifi_connected != 0);
   }
-  if (sts_present != disp_sts_present) {
-    disp_sts_present = sts_present;
-    drawStsStatusLine(kDispStatusStsY, sts_present != 0);
+  if (gOnlineMask != disp_sts_online_mask) {
+    disp_sts_online_mask = gOnlineMask;
+    drawStsStatusLine(kDispStatusStsY, gOnlineMask);
   }
 }
 
@@ -416,7 +537,15 @@ void setup() {
   BLEDevice::startAdvertising();
 
   sts.begin();
-  sts.enableVelocityMode({7, 8});
+  scanAllServosOnline();
+  updateStatusDisplayIfChanged();
+  {
+    const std::vector<uint8_t> onlineWheels = filterOnline(gWheelIds);
+    if (!onlineWheels.empty()) {
+      sts.enableVelocityMode(onlineWheels);
+      wheelVelocityPrimed = true;
+    }
+  }
 }
 
 void loop() {
@@ -489,10 +618,15 @@ void loop() {
       driveWheelVelocityFromTargets();
     }
   } else if (prevBleRxMs != 0 && !stsHaltSent) {
-    sts.halt({1, 2, 3, 4, 5, 6, 7, 8});
+    const std::vector<uint8_t> online = filterOnline(gAllServoIds);
+    if (!online.empty()) {
+      sts.halt(online);
+    }
     if (s_armTorqueMask != 0) {
-      const uint8_t allArmIds[STSDriver::kArmJointCount] = {1, 2, 3, 4, 5, 6};
-      sts.releaseTorque(allArmIds, STSDriver::kArmJointCount);
+      const std::vector<uint8_t> onlineArms = filterOnline(gArmIds);
+      if (!onlineArms.empty()) {
+        sts.releaseTorque(onlineArms);
+      }
       s_armTorqueMask = 0;
     }
     stsHaltSent = true;
@@ -500,18 +634,11 @@ void loop() {
 
   if (currentMs - prevSTSReadMs >= STS_RX_INTERVAL) {
     prevSTSReadMs = currentMs;
-    if (sts.readAngles({1, 2, 3, 4, 5, 6, 7, 8}, gServoReadPos)) {
-      sts_present = 1;
-      for (uint8_t i = 0; i < STSDriver::kArmJointCount; i++) {
-        gArmRawPos[i] = (uint16_t)(gServoReadPos[i] & 0x0FFF);
-      }
+    pingNextServoPresence();
+    if (!gOnlineIds.empty() && sts.readAngles(gOnlineIds, gServoReadPos)) {
+      applyReadPositions(gOnlineIds, gServoReadPos);
       packArm12(gArmRawPos, st.armPos);
-
-      gWheelRawPos[0] = (uint16_t)(gServoReadPos[6] & 0x0FFF); // STS 7 = left
-      gWheelRawPos[1] = (uint16_t)(gServoReadPos[7] & 0x0FFF); // STS 8 = right
       packWheelEnc12(gWheelRawPos[0], gWheelRawPos[1], st.wheelEnc);
-    } else {
-      sts_present = 0;
     }
     updateStatusDisplayIfChanged();
   }
