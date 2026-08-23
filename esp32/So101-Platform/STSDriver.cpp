@@ -1,7 +1,6 @@
 #include "STSDriver.h"
 #include <string.h>
 
-static const uint8_t INST_PING = 0x01;
 static const uint8_t INST_SYNC_READ = 0x82;
 static const uint8_t INST_SYNC_WRITE = 0x83;
 static const uint8_t REG_TORQUE_ENABLE = 40;
@@ -13,11 +12,9 @@ static const uint8_t REG_GOAL_POSITION = 0x2A;
 static const uint8_t REG_GOAL_SPEED_L = 46;
 static const uint8_t ARM_DATA_LEN = 2;
 static const uint8_t RESP_FRAME_LEN = 8;
-static const uint8_t PING_RESP_LEN = 6;
 
 static const uint32_t kRxIdleUs = 400;
 static const uint32_t kRxMaxUs = 8000;
-static const uint32_t kPingRxMaxUs = 2000;
 static constexpr uint8_t kWheelAcceleration = 0;
 /** Practical FeeTech SYNC_* packet limit (IDs + framing). */
 static constexpr size_t kMaxIdsPerPacket = 20;
@@ -82,9 +79,17 @@ int STSDriver::parseStatusFrame(const uint8_t *frame) {
 }
 
 int STSDriver::findPosition(const uint8_t *buf, size_t buflen, uint8_t id) {
+  // Same approach as WebUI findPositionForId: slide one byte at a time and
+  // validate each candidate with parseStatusFrame.
+  if (buflen < RESP_FRAME_LEN) {
+    return -1;
+  }
   for (size_t i = 0; i + RESP_FRAME_LEN <= buflen; i++) {
     if (buf[i] == 0xFF && buf[i + 1] == 0xFF && buf[i + 2] == id) {
-      return parseStatusFrame(&buf[i]);
+      const int pos = parseStatusFrame(&buf[i]);
+      if (pos >= 0) {
+        return pos;
+      }
     }
   }
   return -1;
@@ -122,20 +127,44 @@ bool STSDriver::readAngles(const std::vector<uint8_t> &ids, std::vector<int16_t>
       break;
     }
   }
-  if (n < expectRx) {
+
+  out.assign(count, -1);
+  if (n < RESP_FRAME_LEN) {
+    _presentValid = false;
     return false;
   }
 
-  out.resize(count);
+  size_t found = 0;
   for (uint8_t i = 0; i < count; i++) {
     const int pos = findPosition(_rxBuf.data(), n, ids[i]);
-    if (pos < 0) {
-      return false;
+    if (pos >= 0) {
+      out[i] = (int16_t)pos;
+      found++;
     }
-    out[i] = (int16_t)pos;
   }
-  _presentValid = true;
-  return true;
+  _presentValid = found > 0;
+  return found > 0;
+}
+
+bool STSDriver::scanAllServosOnline(const std::vector<uint8_t> &candidateIds,
+                                    std::vector<uint8_t> &foundIds,
+                                    std::vector<int16_t> &foundPos) {
+  foundIds.clear();
+  foundPos.clear();
+  std::vector<int16_t> raw;
+  if (!readAngles(candidateIds, raw)) {
+    return false;
+  }
+  foundIds.reserve(candidateIds.size());
+  foundPos.reserve(candidateIds.size());
+  for (size_t i = 0; i < candidateIds.size() && i < raw.size(); i++) {
+    if (raw[i] < 0) {
+      continue;
+    }
+    foundIds.push_back(candidateIds[i]);
+    foundPos.push_back(raw[i]);
+  }
+  return !foundIds.empty();
 }
 
 size_t STSDriver::buildSyncWritePositionPacket(uint8_t *out, const uint8_t *ids, uint8_t count,
@@ -269,48 +298,6 @@ void STSDriver::engageTorque(const std::vector<uint8_t> &ids) {
   const size_t len =
       buildSyncWriteBytePacket(_syncWriteTx.data(), ids.data(), count, REG_TORQUE_ENABLE, on.data());
   syncWriteRaw(_syncWriteTx.data(), len);
-}
-
-bool STSDriver::ping(uint8_t id) {
-  // TX: FF FF ID 02 01 CHK
-  uint8_t tx[6];
-  tx[0] = 0xFF;
-  tx[1] = 0xFF;
-  tx[2] = id;
-  tx[3] = 0x02;
-  tx[4] = INST_PING;
-  tx[5] = checksum(&tx[2], 3);
-
-  while (_serial.available() > 0) {
-    _serial.read();
-  }
-  _serial.write(tx, sizeof(tx));
-  _serial.flush();
-
-  uint8_t rx[PING_RESP_LEN];
-  size_t n = 0;
-  const uint32_t t0 = micros();
-  uint32_t lastByteUs = 0;
-  while ((uint32_t)(micros() - t0) < kPingRxMaxUs) {
-    while (_serial.available() > 0 && n < PING_RESP_LEN) {
-      rx[n++] = (uint8_t)_serial.read();
-      lastByteUs = micros();
-    }
-    if (n >= PING_RESP_LEN) {
-      break;
-    }
-    if (n > 0 && lastByteUs > 0 && (uint32_t)(micros() - lastByteUs) > kRxIdleUs) {
-      break;
-    }
-  }
-  if (n < PING_RESP_LEN) {
-    return false;
-  }
-  // RX: FF FF ID 02 ERR CHK
-  if (rx[0] != 0xFF || rx[1] != 0xFF || rx[2] != id || rx[3] != 0x02) {
-    return false;
-  }
-  return checksum(&rx[2], 3) == rx[5];
 }
 
 void STSDriver::enableVelocityMode(const std::vector<uint8_t> &ids) {

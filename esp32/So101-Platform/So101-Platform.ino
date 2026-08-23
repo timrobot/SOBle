@@ -121,14 +121,12 @@ static constexpr uint8_t kWheelCount = 2;
 static std::vector<uint8_t> gAllServoIds = {1, 2, 3, 4, 5, 6, 7, 8};
 static std::vector<uint8_t> gArmIds = {1, 2, 3, 4, 5, 6};
 static std::vector<uint8_t> gWheelIds = {7, 8};
-/** IDs that currently answer PING (subset of gAllServoIds). */
+/** IDs that currently answer SYNC_READ (subset of gAllServoIds). */
 static std::vector<uint8_t> gOnlineIds;
 /** bit0 = ID1 … bit7 = ID8 */
 static uint8_t gOnlineMask = 0;
-static size_t gPingScanIndex = 0;
 
 static uint16_t gArmRawPos[kArmJointCount];
-static std::vector<int16_t> gServoReadPos;
 static uint16_t gWheelRawPos[kWheelCount] = {0, 0};
 
 static constexpr float MADGWICK_BETA = 0.06f;
@@ -234,25 +232,6 @@ static std::vector<uint8_t> filterOnline(const std::vector<uint8_t> &ids) {
   return out;
 }
 
-static void scanAllServosOnline() {
-  gOnlineMask = 0;
-  for (uint8_t id : gAllServoIds) {
-    setServoOnline(id, sts.ping(id));
-  }
-  rebuildOnlineIdsFromMask();
-}
-
-/** Round-robin PING of one candidate ID from gAllServoIds. */
-static void pingNextServoPresence() {
-  if (gAllServoIds.empty()) {
-    return;
-  }
-  const uint8_t id = gAllServoIds[gPingScanIndex % gAllServoIds.size()];
-  gPingScanIndex++;
-  setServoOnline(id, sts.ping(id));
-  rebuildOnlineIdsFromMask();
-}
-
 static void applyReadPositions(const std::vector<uint8_t> &ids, const std::vector<int16_t> &pos) {
   const size_t n = ids.size() < pos.size() ? ids.size() : pos.size();
   for (size_t i = 0; i < n; i++) {
@@ -289,6 +268,24 @@ static void packWheelEnc12(uint16_t left, uint16_t right, uint8_t out[3]) {
   out[0] = (uint8_t)left;
   out[1] = (uint8_t)(((left >> 8) & 0x0F) | ((right & 0x0F) << 4));
   out[2] = (uint8_t)(right >> 4);
+}
+
+/** Refresh online mask + packed encoders from a bus-wide SYNC_READ scan. */
+static void refreshServoPresenceAndEncoders() {
+  std::vector<uint8_t> foundIds;
+  std::vector<int16_t> foundPos;
+  gOnlineMask = 0;
+  gOnlineIds.clear();
+  if (!sts.scanAllServosOnline(gAllServoIds, foundIds, foundPos)) {
+    return;
+  }
+  for (uint8_t id : foundIds) {
+    setServoOnline(id, true);
+  }
+  rebuildOnlineIdsFromMask();
+  applyReadPositions(foundIds, foundPos);
+  packArm12(gArmRawPos, st.armPos);
+  packWheelEnc12(gWheelRawPos[0], gWheelRawPos[1], st.wheelEnc);
 }
 
 static void unpackArm12(const uint8_t packed[9], uint16_t *out) {
@@ -549,7 +546,7 @@ void setup() {
   BLEDevice::startAdvertising();
 
   sts.begin();
-  scanAllServosOnline();
+  refreshServoPresenceAndEncoders();
   updateStatusDisplayIfChanged();
   {
     const std::vector<uint8_t> onlineWheels = filterOnline(gWheelIds);
@@ -646,12 +643,7 @@ void loop() {
 
   if (currentMs - prevSTSReadMs >= STS_RX_INTERVAL) {
     prevSTSReadMs = currentMs;
-    pingNextServoPresence();
-    if (!gOnlineIds.empty() && sts.readAngles(gOnlineIds, gServoReadPos)) {
-      applyReadPositions(gOnlineIds, gServoReadPos);
-      packArm12(gArmRawPos, st.armPos);
-      packWheelEnc12(gWheelRawPos[0], gWheelRawPos[1], st.wheelEnc);
-    }
+    refreshServoPresenceAndEncoders();
     updateStatusDisplayIfChanged();
   }
 }

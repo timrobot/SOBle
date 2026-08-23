@@ -13,10 +13,20 @@ public:
 
   /**
    * SYNC_READ present position for ``ids``.
-   * On success, ``out`` is resized to ``ids.size()`` with out[i] for ids[i].
-   * Returns false on bus error or missing reply for any ID.
+   * Partial replies are OK: ``out`` is resized to ``ids.size()``; ``out[i]`` is the
+   * 12-bit position when that ID answered, or -1 if missing.
+   * Returns true if at least one ID replied with a valid status frame.
    */
   bool readAngles(const std::vector<uint8_t> &ids, std::vector<int16_t> &out);
+
+  /**
+   * SYNC_READ ``candidateIds`` and keep only responders.
+   * ``foundIds`` / ``foundPos`` are parallel (cleared then filled).
+   * Returns true if at least one servo replied.
+   */
+  bool scanAllServosOnline(const std::vector<uint8_t> &candidateIds,
+                           std::vector<uint8_t> &foundIds,
+                           std::vector<int16_t> &foundPos);
 
   /**
    * SYNC_WRITE goal position for ``ids``.
@@ -44,12 +54,6 @@ public:
   /** Torque on (STS Torque_Enable=1) before position commands. */
   void engageTorque(const std::vector<uint8_t> &ids);
 
-  /**
-   * FeeTech PING (instruction 0x01) for a single servo ID — not a SYNC_READ.
-   * Returns true if a valid status reply is received.
-   */
-  bool ping(uint8_t id);
-
   bool isHalted() const { return _halted; }
 
   bool hasValidPresent() const { return _presentValid; }
@@ -63,7 +67,9 @@ private:
                                    const uint16_t *speeds);
   size_t buildSyncWriteBytePacket(uint8_t *out, const uint8_t *ids, uint8_t count, uint8_t reg,
                                   const uint8_t *values);
+  /** Validate FF FF … status frame; return present-position raw or -1. */
   int parseStatusFrame(const uint8_t *frame);
+  /** Scan ``buf`` byte-by-byte for a valid status frame from ``id``. */
   int findPosition(const uint8_t *buf, size_t buflen, uint8_t id);
   void syncWriteRaw(const uint8_t *packet, size_t len);
   bool idsUsable(const std::vector<uint8_t> &ids) const;
