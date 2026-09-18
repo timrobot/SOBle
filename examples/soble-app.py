@@ -111,14 +111,14 @@ def main() -> int:
         default="/dev/tty.usbmodem575E0032081",
         help="Leader serial port (Linux e.g. /dev/ttyACM0, Windows COM3)",
     )
-    p.add_argument("--name", "-n", default="Capybara", help="Robot BLE name")
+    p.add_argument("--ble_name", "-n", default="Capybara", help="Robot BLE name")
     args = p.parse_args()
 
     print(f"Config: {args.config}")
 
     leader = SO101Leader(args.leader_port)
     leader.load_config(args.config)
-    platform = SO101Platform(args.name)
+    robot_platform = SO101Platform(args.ble_name)
 
     pygame.init()
     pygame.display.set_caption("BLE teleop — WASD drive | ESC or Q to quit")
@@ -144,12 +144,12 @@ def main() -> int:
             left = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE + fwd * MOTOR_SPEED_SCALE))))
             right = max(-125, min(125, int(round(yaw * TURN_SPEED_SCALE - fwd * MOTOR_SPEED_SCALE))))
 
-            platform.drive(left, right)
+            robot_platform.drive(left, right)
             positions = leader.getMappedPositions()
-            platform.setArmPositions(positions)
+            robot_platform.setArmPositions(positions)
 
-            tags_viz = platform.detectApriltags()
-            notify_age = platform.last_notify_age_s()
+            tags_viz = robot_platform.detectApriltags()
+            notify_age = robot_platform.last_notify_age_s()
 
             view.fill((16, 16, 20))
             if tags_viz:

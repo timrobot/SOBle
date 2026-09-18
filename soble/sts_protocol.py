@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     import serial
 
 ARM_JOINT_COUNT = 6
+LEG_JOINT_COUNT = 8
 
 ARM_JOINT_NAMES = (
     "shoulder_pan",
@@ -22,7 +23,10 @@ ARM_JOINT_NAMES = (
     "gripper",
 )
 
+LEG_JOINT_NAMES = tuple(f"leg_{i}" for i in range(1, LEG_JOINT_COUNT + 1))
+
 DEFAULT_RAW_LIMITS = np.tile([0, 4095], (ARM_JOINT_COUNT, 1)).astype(np.int32)
+DEFAULT_LEG_RAW_LIMITS = np.tile([0, 4095], (LEG_JOINT_COUNT, 1)).astype(np.int32)
 
 # FeeTech STS/SMS serial protocol (see examples/config-sts.py)
 STS_BAUDRATE = 1_000_000
@@ -46,12 +50,27 @@ def parse_arm_joints(
     joints: list[int] | tuple[int, ...] | np.ndarray,
 ) -> list[int] | None:
     """Return six joint values, or None if joints is empty (disable torque)."""
+    return _parse_joint_vector(joints, ARM_JOINT_COUNT, "arm")
+
+
+def parse_leg_joints(
+    joints: list[int] | tuple[int, ...] | np.ndarray,
+) -> list[int] | None:
+    """Return eight leg joint values, or None if joints is empty (disable torque)."""
+    return _parse_joint_vector(joints, LEG_JOINT_COUNT, "leg")
+
+
+def _parse_joint_vector(
+    joints: list[int] | tuple[int, ...] | np.ndarray,
+    count: int,
+    label: str,
+) -> list[int] | None:
     if isinstance(joints, np.ndarray):
         flat = joints.reshape(-1)
         if flat.size == 0:
             return None
-        if flat.size != ARM_JOINT_COUNT:
-            raise ValueError(f"expected {ARM_JOINT_COUNT} joint values, got {flat.size}")
+        if flat.size != count:
+            raise ValueError(f"expected {count} {label} joint values, got {flat.size}")
         raw = flat.tolist()
     elif isinstance(joints, tuple):
         raw = list(joints)
@@ -59,22 +78,23 @@ def parse_arm_joints(
         raw = joints
     else:
         raise TypeError(
-            "joints must be a list, tuple, or numpy.ndarray of 6 numbers (or [] to disable)"
+            f"{label} joints must be a list, tuple, or numpy.ndarray of {count} numbers "
+            "(or [] to disable)"
         )
 
     if len(raw) == 0:
         return None
-    if len(raw) != ARM_JOINT_COUNT:
-        raise ValueError(f"expected {ARM_JOINT_COUNT} joint values, got {len(raw)}")
+    if len(raw) != count:
+        raise ValueError(f"expected {count} {label} joint values, got {len(raw)}")
 
     out: list[int] = []
     for i, v in enumerate(raw):
         try:
             iv = int(v)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"joint[{i}] is not a number: {v!r}") from exc
+            raise ValueError(f"{label} joint[{i}] is not a number: {v!r}") from exc
         if not 0 <= iv <= 4095:
-            raise ValueError(f"joint[{i}]={iv} out of range 0..4095")
+            raise ValueError(f"{label} joint[{i}]={iv} out of range 0..4095")
         out.append(iv)
     return out
 

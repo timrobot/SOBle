@@ -63,10 +63,14 @@ const long BLE_TX_INTERVAL = 40;
 #pragma pack(push, 1)
 struct RobotCommand {
   uint8_t cmd;
-  int8_t left;
-  int8_t right;
-  uint8_t arm[9];
-  uint8_t enabled; // bit0=J1, bit1=J2, ...
+  int8_t left1; // J7
+  int8_t right1; // J8
+  int8_t left2; // J9 just in case for omniwheel
+  int8_t right2; // J10 just in case for omniwheel
+  uint8_t arm[9]; // 6 motors packed
+  uint8_t leg[12]; // 8 motors packed
+  uint8_t arm_enabled; // bit0=J1, bit1=J2, ...
+  uint8_t leg_enabled; // bit0=J11, bit1=J12, ...
 };
 
 struct AprilTagInfo {
@@ -75,22 +79,24 @@ struct AprilTagInfo {
 };
 
 struct RobotState {
-  uint8_t wheelEnc[3];
+  uint8_t wheelEnc[6];
   uint8_t armPos[9];
+  uint8_t legPos[12];
   int16_t quat[4];
   uint8_t ntags;
   AprilTagInfo tags[10];
 };
 #pragma pack(pop)
 
-static_assert(sizeof(RobotCommand) == 13, "RobotCommand layout must match BLE host");
+static_assert(sizeof(RobotCommand) == 28, "RobotCommand layout must match BLE host");
+static_assert(sizeof(RobotState) == 216, "RobotState layout must match BLE host");
 static constexpr uint8_t kArmEnableMask = 0x3F; // bit0=J1 .. bit5=J6
+static constexpr uint8_t kLegEnableMask = 0xFF; // bit0=J11 .. bit7=J18
 
 static constexpr uint8_t CMD_ACTUATORS = '0';
 static constexpr uint8_t CMD_TAG16H5 = '1';
 static constexpr uint8_t CMD_TAG25H9 = '2';
 static constexpr uint8_t CMD_TAG36H11 = '3';
-static constexpr uint8_t CMD_STREAM = 'A';
 static constexpr size_t RASPI_CMD_PAYLOAD_LEN = 7;
 
 RobotCommand targets;
@@ -99,35 +105,38 @@ RobotState st;
 HardwareSerial RaspiSerial(0);
 HostSerial hostSerial(RaspiSerial, 1);
 static uint8_t raspi_alive = 0;
-static uint8_t wifi_connected = 0;
 static uint8_t disp_raspi_alive = 0xFF;
-static uint8_t disp_wifi_connected = 0xFF;
-static uint8_t disp_sts_online_mask = 0xFF;
+static uint32_t disp_sts_online_mask = 0xFFFFFFFFu;
 
 static constexpr int16_t kDispStatusPiY = 100;
-static constexpr int16_t kDispStatusWifiY = 124;
-static constexpr int16_t kDispStatusStsY = 148;
+static constexpr int16_t kDispStatusStsY = 124;
 static constexpr int16_t kDispStatusLineH = 20;
 
 STSDriver sts(2, ARM_RX, ARM_TX, ARM_BAUD);
 static bool stsHaltSent = false;
 static bool wheelVelocityPrimed = false;
 static uint8_t s_armTorqueMask = 0; // which arm joints currently have torque enabled
+static uint8_t s_legTorqueMask = 0; // which leg joints currently have torque enabled
 
 /** Sketch-level STS topology (may change at runtime). */
-static constexpr uint8_t kMaxServos = 8;
+static constexpr uint8_t kMaxServos = 18;
 static constexpr uint8_t kArmJointCount = 6;
-static constexpr uint8_t kWheelCount = 2;
-static std::vector<uint8_t> gAllServoIds = {1, 2, 3, 4, 5, 6, 7, 8};
+static constexpr uint8_t kLegJointCount = 8;
+static constexpr uint8_t kWheelCount = 4;
+static std::vector<uint8_t> gAllServoIds = {
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18
+};
 static std::vector<uint8_t> gArmIds = {1, 2, 3, 4, 5, 6};
-static std::vector<uint8_t> gWheelIds = {7, 8};
+static std::vector<uint8_t> gWheelIds = {7, 8, 9, 10};
+static std::vector<uint8_t> gLegIds = {11, 12, 13, 14, 15, 16, 17, 18};
 /** IDs that currently answer SYNC_READ (subset of gAllServoIds). */
 static std::vector<uint8_t> gOnlineIds;
-/** bit0 = ID1 … bit7 = ID8 */
-static uint8_t gOnlineMask = 0;
+/** bit0 = ID1 … bit17 = ID18 */
+static uint32_t gOnlineMask = 0;
 
 static uint16_t gArmRawPos[kArmJointCount];
-static uint16_t gWheelRawPos[kWheelCount] = {0, 0};
+static uint16_t gLegRawPos[kLegJointCount];
+static uint16_t gWheelRawPos[kWheelCount] = {0, 0, 0, 0};
 
 static constexpr float MADGWICK_BETA = 0.06f;
 Madgwick imuFilter(MADGWICK_BETA);
@@ -167,21 +176,24 @@ struct CbChar : BLECharacteristicCallbacks {
           memcpy(&targets, buf, sizeof(RobotCommand));
         } else if (n >= 3) {
           targets.cmd = CMD_ACTUATORS;
-          targets.left = (int8_t)buf[1];
-          targets.right = (int8_t)buf[2];
+          targets.left1 = (int8_t)buf[1];
+          targets.right1 = (int8_t)buf[2];
+          targets.left2 = 0;
+          targets.right2 = 0;
         } else {
           break;
         }
-        // Host teleop is symmetric; left wheel STS mount is reversed vs right.
-        targets.left = (int8_t)constrain(-(int)targets.left, -125, 125);
-        targets.right = (int8_t)constrain((int)targets.right, -125, 125);
+        // Host teleop is symmetric; left wheel STS mounts are reversed vs right.
+        targets.left1 = (int8_t)constrain(-(int)targets.left1, -125, 125);
+        targets.right1 = (int8_t)constrain((int)targets.right1, -125, 125);
+        targets.left2 = (int8_t)constrain(-(int)targets.left2, -125, 125);
+        targets.right2 = (int8_t)constrain((int)targets.right2, -125, 125);
         prevBleRxMs = millis();
         break;
 
       case CMD_TAG16H5:
       case CMD_TAG25H9:
       case CMD_TAG36H11:
-      case CMD_STREAM:
         if (n >= RASPI_CMD_PAYLOAD_LEN) {
           hostSerial.writeBytes((void *)buf, RASPI_CMD_PAYLOAD_LEN);
         }
@@ -213,11 +225,11 @@ static void setServoOnline(uint8_t id, bool online) {
   if (id < 1 || id > kMaxServos) {
     return;
   }
-  const uint8_t bit = (uint8_t)(1u << (id - 1));
+  const uint32_t bit = 1u << (id - 1);
   if (online) {
-    gOnlineMask = (uint8_t)(gOnlineMask | bit);
+    gOnlineMask |= bit;
   } else {
-    gOnlineMask = (uint8_t)(gOnlineMask & ~bit);
+    gOnlineMask &= ~bit;
   }
 }
 
@@ -239,35 +251,42 @@ static void applyReadPositions(const std::vector<uint8_t> &ids, const std::vecto
     const uint16_t raw = (uint16_t)(pos[i] & 0x0FFF);
     if (id >= 1 && id <= kArmJointCount) {
       gArmRawPos[id - 1] = raw;
-    } else if (id == 7) {
-      gWheelRawPos[0] = raw;
-    } else if (id == 8) {
-      gWheelRawPos[1] = raw;
+    } else if (id >= 7 && id <= 10) {
+      gWheelRawPos[id - 7] = raw;
+    } else if (id >= 11 && id <= 18) {
+      gLegRawPos[id - 11] = raw;
     }
   }
 }
 
-static void packArm12(const uint16_t *in, uint8_t packed[9]) {
-  memset(packed, 0, 9);
+static void packU12(const uint16_t *in, int count, uint8_t *packed, int packedLen) {
+  memset(packed, 0, packedLen);
   int byteidx = 0;
   bool insert2 = true;
-  for (int i = 0; i < kArmJointCount; i++) {
-    const uint16_t v = in[i];
+  for (int i = 0; i < count; i++) {
+    const uint16_t v = in[i] & 0x0FFF;
     if (insert2) {
       packed[byteidx++] = (uint8_t)(v & 0xFF);
       packed[byteidx] = (uint8_t)((v >> 8) & 0x0F);
     } else {
-      packed[byteidx++] = (uint8_t)((v & 0x0F) << 4) | packed[byteidx];
+      packed[byteidx] = (uint8_t)(((v & 0x0F) << 4) | packed[byteidx]);
+      byteidx++;
       packed[byteidx++] = (uint8_t)((v >> 4) & 0xFF);
     }
     insert2 = !insert2;
   }
 }
 
-static void packWheelEnc12(uint16_t left, uint16_t right, uint8_t out[3]) {
-  out[0] = (uint8_t)left;
-  out[1] = (uint8_t)(((left >> 8) & 0x0F) | ((right & 0x0F) << 4));
-  out[2] = (uint8_t)(right >> 4);
+static void packArm12(const uint16_t *in, uint8_t packed[9]) {
+  packU12(in, kArmJointCount, packed, 9);
+}
+
+static void packLeg12(const uint16_t *in, uint8_t packed[12]) {
+  packU12(in, kLegJointCount, packed, 12);
+}
+
+static void packWheelEnc12(const uint16_t in[4], uint8_t out[6]) {
+  packU12(in, 4, out, 6);
 }
 
 /** Refresh online mask + packed encoders from a bus-wide SYNC_READ scan. */
@@ -285,14 +304,15 @@ static void refreshServoPresenceAndEncoders() {
   rebuildOnlineIdsFromMask();
   applyReadPositions(foundIds, foundPos);
   packArm12(gArmRawPos, st.armPos);
-  packWheelEnc12(gWheelRawPos[0], gWheelRawPos[1], st.wheelEnc);
+  packLeg12(gLegRawPos, st.legPos);
+  packWheelEnc12(gWheelRawPos, st.wheelEnc);
 }
 
-static void unpackArm12(const uint8_t packed[9], uint16_t *out) {
+static void unpackU12(const uint8_t *packed, int count, uint16_t *out) {
   int byteidx = 0;
   bool extract2 = true;
   uint16_t a, b = 0;
-  for (int i = 0; i < kArmJointCount; i++) {
+  for (int i = 0; i < count; i++) {
     a = packed[byteidx++];
     if (extract2) {
       b = packed[byteidx++];
@@ -305,10 +325,18 @@ static void unpackArm12(const uint8_t packed[9], uint16_t *out) {
   }
 }
 
+static void unpackArm12(const uint8_t packed[9], uint16_t *out) {
+  unpackU12(packed, kArmJointCount, out);
+}
+
+static void unpackLeg12(const uint8_t packed[12], uint16_t *out) {
+  unpackU12(packed, kLegJointCount, out);
+}
+
 static void driveArmJointsFromTargets() {
   unpackArm12(targets.arm, gArmRawPos);
 
-  const uint8_t wantMask = targets.enabled & kArmEnableMask;
+  const uint8_t wantMask = targets.arm_enabled & kArmEnableMask;
   const uint8_t engageMask = (uint8_t)(wantMask & ~s_armTorqueMask);
 
   std::vector<uint8_t> releaseIds;
@@ -350,6 +378,51 @@ static void driveArmJointsFromTargets() {
   s_armTorqueMask = wantMask;
 }
 
+static void driveLegJointsFromTargets() {
+  unpackLeg12(targets.leg, gLegRawPos);
+
+  const uint8_t wantMask = targets.leg_enabled & kLegEnableMask;
+  const uint8_t engageMask = (uint8_t)(wantMask & ~s_legTorqueMask);
+
+  std::vector<uint8_t> releaseIds;
+  std::vector<uint8_t> engageIds;
+  std::vector<uint8_t> driveIds;
+  std::vector<int16_t> drivePos;
+  releaseIds.reserve(kLegJointCount);
+  engageIds.reserve(kLegJointCount);
+  driveIds.reserve(kLegJointCount);
+  drivePos.reserve(kLegJointCount);
+
+  for (uint8_t i = 0; i < kLegJointCount; i++) {
+    const uint8_t bit = (uint8_t)(1u << i);
+    const uint8_t id = (uint8_t)(i + 11);
+    if (!isServoOnline(id)) {
+      continue;
+    }
+    if (engageMask & bit) {
+      engageIds.push_back(id);
+    }
+    if (wantMask & bit) {
+      driveIds.push_back(id);
+      drivePos.push_back((int16_t)gLegRawPos[i]);
+    } else {
+      releaseIds.push_back(id);
+    }
+  }
+
+  if (!releaseIds.empty()) {
+    sts.releaseTorque(releaseIds);
+  }
+  if (!engageIds.empty()) {
+    sts.engageTorque(engageIds);
+  }
+  if (!driveIds.empty()) {
+    sts.setAngles(driveIds, drivePos);
+  }
+
+  s_legTorqueMask = wantMask;
+}
+
 static int16_t wheelSpeedToSts(int8_t speed) {
   // static constexpr int16_t kStsMaxWheelSpeed = 3400;
   // static constexpr int8_t kWheelCmdScale = 27; // ±125 BLE cmd → ±3375 STS (~±3400 max)
@@ -363,7 +436,9 @@ static void driveWheelVelocityFromTargets() {
   if (onlineWheels.empty()) {
     return;
   }
-  if (!wheelVelocityPrimed && (targets.left != 0 || targets.right != 0)) {
+  const bool anyCmd =
+    targets.left1 != 0 || targets.right1 != 0 || targets.left2 != 0 || targets.right2 != 0;
+  if (!wheelVelocityPrimed && anyCmd) {
     // setup() may run before servo power is up; re-enter velocity mode on first drive.
     sts.enableVelocityMode(onlineWheels);
     wheelVelocityPrimed = true;
@@ -372,9 +447,13 @@ static void driveWheelVelocityFromTargets() {
   wheelSpeed.reserve(onlineWheels.size());
   for (uint8_t id : onlineWheels) {
     if (id == 7) {
-      wheelSpeed.push_back(wheelSpeedToSts(targets.left));
+      wheelSpeed.push_back(wheelSpeedToSts(targets.left1));
     } else if (id == 8) {
-      wheelSpeed.push_back(wheelSpeedToSts(targets.right));
+      wheelSpeed.push_back(wheelSpeedToSts(targets.right1));
+    } else if (id == 9) {
+      wheelSpeed.push_back(wheelSpeedToSts(targets.left2));
+    } else if (id == 10) {
+      wheelSpeed.push_back(wheelSpeedToSts(targets.right2));
     }
   }
   if (wheelSpeed.size() == onlineWheels.size()) {
@@ -440,7 +519,7 @@ static void drawStatusLine(int16_t y, const char *label, bool ok) {
   }
 }
 
-static void drawStsStatusLine(int16_t y, uint8_t onlineMask) {
+static void drawStsStatusLine(int16_t y, uint32_t onlineMask) {
   gfx->fillRect(8, y, 224, kDispStatusLineH * 2, RGB565_BLACK);
   gfx->setTextSize(2);
   gfx->setCursor(8, y);
@@ -477,10 +556,6 @@ static void updateStatusDisplayIfChanged() {
   if (raspi_alive != disp_raspi_alive) {
     disp_raspi_alive = raspi_alive;
     drawStatusLine(kDispStatusPiY, "Pi", raspi_alive != 0);
-  }
-  if (wifi_connected != disp_wifi_connected) {
-    disp_wifi_connected = wifi_connected;
-    drawStatusLine(kDispStatusWifiY, "WiFi", wifi_connected != 0);
   }
   if (gOnlineMask != disp_sts_online_mask) {
     disp_sts_online_mask = gOnlineMask;
@@ -584,38 +659,26 @@ void loop() {
   }
 
   message_t *msg = hostSerial.readMessage();
-  bool is_ipv4 = false;
   if (msg == STIMEOUT) {
     st.ntags = 0;
     memset(st.tags, 0, 10 * sizeof(AprilTagInfo));
     raspi_alive = 0;
-    wifi_connected = 0;
   } else if (msg != nullptr && msg->length >= 1) {
     raspi_alive = 1;
-    wifi_connected = (msg->data[0] & 0x80) >> 7; // first bit is wifi_connected status
-    is_ipv4 = (msg->data[0] & 0x20) >> 5; // third bit is flag if this is ipv4
-    if (is_ipv4) {
-      if (msg->length == 5) {
-        // we have an ipv4 address
-        memcpy(st.tags, &msg->data[1], 4);
-      }
-      st.ntags = 0xE0; // 11100000
-    } else {
-      st.ntags = msg->data[0] & 0x1F; // the last 5 bits are the ntags count
-      if (st.ntags > 10) {
-        st.ntags = 10;
-      }
-      const size_t need = 1 + (size_t)st.ntags * sizeof(AprilTagInfo);
-      if (msg->length >= (int)need && st.ntags > 0) {
-        memcpy(st.tags, &msg->data[1], st.ntags * sizeof(AprilTagInfo));
-      } else if (st.ntags > 0) {
-        st.ntags = 0;
-      }
-      if (st.ntags < 10) {
-        memset(&st.tags[st.ntags], 0, (10 - st.ntags) * sizeof(AprilTagInfo));
-      }
-      st.ntags = st.ntags | (raspi_alive << 7) | (wifi_connected << 6); // restructure st.ntags for transmission
+    st.ntags = msg->data[0] & 0x1F; // low 5 bits are the ntags count
+    if (st.ntags > 10) {
+      st.ntags = 10;
     }
+    const size_t need = 1 + (size_t)st.ntags * sizeof(AprilTagInfo);
+    if (msg->length >= (int)need && st.ntags > 0) {
+      memcpy(st.tags, &msg->data[1], st.ntags * sizeof(AprilTagInfo));
+    } else if (st.ntags > 0) {
+      st.ntags = 0;
+    }
+    if (st.ntags < 10) {
+      memset(&st.tags[st.ntags], 0, (10 - st.ntags) * sizeof(AprilTagInfo));
+    }
+    st.ntags = st.ntags | (raspi_alive << 7); // bit7 = raspi alive for BLE hosts
   }
   updateStatusDisplayIfChanged();
 
@@ -624,6 +687,7 @@ void loop() {
     if (currentMs - prevSTSWriteMs >= STS_TX_INTERVAL) {
       prevSTSWriteMs = currentMs;
       driveArmJointsFromTargets();
+      driveLegJointsFromTargets();
       driveWheelVelocityFromTargets();
     }
   } else if (prevBleRxMs != 0 && !stsHaltSent) {
@@ -637,6 +701,13 @@ void loop() {
         sts.releaseTorque(onlineArms);
       }
       s_armTorqueMask = 0;
+    }
+    if (s_legTorqueMask != 0) {
+      const std::vector<uint8_t> onlineLegs = filterOnline(gLegIds);
+      if (!onlineLegs.empty()) {
+        sts.releaseTorque(onlineLegs);
+      }
+      s_legTorqueMask = 0;
     }
     stsHaltSent = true;
   }

@@ -96,8 +96,8 @@ A [3D viewer](https://github.com/timrobot/SOBle/releases) is available out of th
 | Script                           | Description                                |
 | -------------------------------- | ------------------------------------------- |
 | [`examples/lead-follow.py`](examples/lead-follow.py)        | Send mapped leader positions → follower |
-| [`examples/viz-apriltags.py`](examples/viz-apriltags.py)      | Drive using WASD, mapped leader → follower, visualize tags on screen. *Raspi+Camera required.*      |
-| [`examples/open-camera-stream.py`](examples/open-camera-stream.py) | View camera stream over WiFi. *Raspi+Camera required.*                |
+| [`examples/soble-app.py`](examples/soble-app.py)      | Drive using WASD, mapped leader → follower, visualize tags on screen. *Raspi+Camera required.*      |
+
 
 ---
 
@@ -151,25 +151,24 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 
 | Method                            | Returns                             | Notes                                                                                         |
 | --------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| `drive(left, right)` | —                                   | Each **−125 … 125** (clamped).                                                                |
-| `wheelEncoders()`                   | `tuple[int, int]`                   | `(left, right)`, each **0 … 4095**.                                                           |
+| `drive(left, right, left2=0, right2=0)` | —                             | Each **−125 … 125** (clamped). Optional `left2`/`right2` for the second wheel pair.           |
+| `wheelEncoders()`                   | `tuple[int, int, int, int]`         | `(left, right, left2, right2)`, each **0 … 4095** (four 12-bit values packed in **6** bytes). |
 | `setArmPositions(joints)`         | —                                   | **6** values, each **0 … 4095** (12-bit). Order **J1 … J6**. Pass **`[]`** to disengage arm. |
 | `getArmPositions()`               | `list[int]`                         | **6** raw encoder values **J1 … J6** from follower arm; **`[]`** if no state yet.             |
+| `setLegPositions(joints)`         | —                                   | **8** values, each **0 … 4095** (12-bit). Order **J11 … J18**. Pass **`[]`** to disengage legs. |
+| `getLegPositions()`               | `list[int]`                         | **8** raw encoder values **J11 … J18**; **`[]`** if no state yet.                              |
 | `imuRotation()`                     | `tuple[float, float, float]`        | IMU roll, pitch, heading in **degrees**.                                                          |
 | `imuQuaternion()`              | `tuple[float, float, float, float]` | IMU unit quaternion **(w, x, y, z)**.                                                             |
 
 
-### Camera Commands
+### Camera / AprilTag Commands
 
 
 | Method                                                             | Returns                                       | Notes                                                                                                           |
 | ------------------------------------------------------------------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `raspiAlive()`                                                  | `bool`                                        | Pi serial seen recently.                                                                                        |
-| `wifiOnline()`                                               | `bool`                                        | Pi WiFi up (`True` if online). Configure WiFi on the Pi manually.                                              |
 | `detectApriltags(estimate_tag_pose=False, camera_params=..., tag_size=3)` | `list` | Tag id plus four corner `(x, y)` pairs (**lb, rb, rt, lt**). Returns **`[]`** if no state yet or no tags in view. Pass `estimate_tag_pose=True` for `(tag_id, corners, R, tvec)` per tag. `tag_size` is the physical outer edge length in your chosen unit (e.g. inches); `tvec` uses the same unit. |
-| `setTagFamily(family)`                                             | —                                             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'`. Stops the host video stream receiver (same as ending `videoCapture()`). |
-| `videoCapture(host=None, port=5000, wait_wifi_s=15)` | `str` (host IP)                               | Start Pi RTP stream; read frames with `imread()`. Waits for Pi WiFi over BLE.   |
-| `imread(copy=True)`                                                         | `np.ndarray` or `None`                        | Latest **1280×720** BGR frame, or `None` if none yet. Pass `copy=False` for a zero-copy view into shared memory (invalid after the next frame). |
+| `setTagFamily(family)`                                             | —                                             | `'tag16h5'`, `'tag25h9'`, or `'tag36h11'`. |
 
 
 #### AprilTags — corners and image
@@ -209,27 +208,3 @@ platform = SO101Platform("Capybara") # or whatever the name appears on the LCD
 ```
 
 Each list entry is `(tag_id, corners_px)` with **four** `(x, y)` pixel pairs in **lb → rb → rt → lt** order.
-
-
-#### Pi camera stream
-
-
-To view the camera, configure WiFi on the Pi first either at flash (Raspberry Pi Imager) or within terminal via `nmcli`. Frames can be read with `imread()`, and are **1280×720** BGR.
-
-```python
-import cv2
-from soble import SO101Platform
-
-platform = SO101Platform("Capybara", log_state=False)  # BLE name on robot OLED
-
-platform.videoCapture()
-print("Press Q or Esc to quit")
-while True:
-    frame = platform.imread()
-    if frame is not None:
-        cv2.imshow("SO101 camera", frame)
-    if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
-        break
-```
-
-Full script: [`examples/open-camera-stream.py`](examples/open-camera-stream.py).

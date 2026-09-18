@@ -18,12 +18,6 @@ APT_PACKAGES=(
   python3-apriltag
   python3-serial
   python3-numpy
-  python3-gi
-  gstreamer1.0-tools
-  gstreamer1.0-plugins-base
-  gstreamer1.0-plugins-good
-  gstreamer1.0-plugins-bad
-  gstreamer1.0-libcamera
 )
 
 log() { printf '%s\n' "$*"; }
@@ -103,37 +97,6 @@ configure_camera() {
   fi
 }
 
-configure_h264_codec() {
-  local codec_conf="/etc/modprobe.d/bcm2835-codec.conf"
-  local modules_file="/etc/modules"
-
-  log "H.264 encoder: $codec_conf"
-  if [[ ! -f $codec_conf ]]; then
-    log "  Creating $codec_conf"
-    printf '%s\n' 'options bcm2835-codec' | sudo tee "$codec_conf" >/dev/null
-    NEEDS_REBOOT=1
-  elif ! sudo grep -qE '^[[:space:]]*options[[:space:]]+bcm2835-codec' "$codec_conf"; then
-    log "  Adding: options bcm2835-codec"
-    printf '%s\n' 'options bcm2835-codec' | sudo tee -a "$codec_conf" >/dev/null
-    NEEDS_REBOOT=1
-  else
-    log "  OK: options bcm2835-codec"
-  fi
-
-  log "Kernel module: $modules_file"
-  if [[ ! -f $modules_file ]]; then
-    log "  Creating $modules_file"
-    printf '%s\n' 'bcm2835-codec' | sudo tee "$modules_file" >/dev/null
-    NEEDS_REBOOT=1
-  elif ! sudo grep -qE '^[[:space:]]*bcm2835-codec([[:space:]]|$)' "$modules_file"; then
-    log "  Adding: bcm2835-codec"
-    printf '%s\n' 'bcm2835-codec' | sudo tee -a "$modules_file" >/dev/null
-    NEEDS_REBOOT=1
-  else
-    log "  OK: bcm2835-codec"
-  fi
-}
-
 install_packages() {
   log "Installing apt packages..."
   sudo apt-get update
@@ -153,24 +116,13 @@ configure_groups() {
   done
 }
 
-verify_gstreamer() {
-  local elem
-  for elem in libcamerasrc v4l2h264enc; do
-    if gst-inspect-1.0 "$elem" >/dev/null 2>&1; then
-      log "  OK: gst-inspect-1.0 $elem"
-    else
-      warn "gst-inspect-1.0 $elem failed — reboot after install if overlays/modules were just changed."
-    fi
-  done
-}
-
 install_systemd_service() {
   if [[ ! -f $TEMPLATE ]]; then
     echo "Missing template: $TEMPLATE" >&2
     exit 1
   fi
 
-  chmod +x "$RASPI_DIR/run_detect_atags.sh" "$RASPI_DIR/run_camera_stream.sh"
+  chmod +x "$RASPI_DIR/run_detect_atags.sh"
 
   mkdir -p "$USER_UNIT_DIR"
   sed "s|@REPO_DIR@|${RASPI_DIR}|g" "$TEMPLATE" >"$DEST"
@@ -197,14 +149,7 @@ main() {
   configure_camera
   log
 
-  configure_h264_codec
-  log
-
   configure_groups
-  log
-
-  log "Verifying GStreamer elements..."
-  verify_gstreamer
   log
 
   install_systemd_service
@@ -218,14 +163,14 @@ main() {
     warn "Log out and back in (or reboot) for video/dialout group membership."
   fi
   if [[ $NEEDS_REBOOT -eq 0 && $NEEDS_RELOGIN -eq 0 ]]; then
-    log "No reboot or re-login required."
+    log "No reboot/relogin required."
   fi
 
   log
-  log "Status:  systemctl --user status $UNIT_NAME"
-  log "Logs:    journalctl --user -u $UNIT_NAME -f"
-  log "Stop:    $RASPI_DIR/stop-detect-atags-service.sh"
-  log "Disable: $RASPI_DIR/stop-detect-atags-service.sh --disable"
+  log "Service status:"
+  systemctl --user status "$UNIT_NAME" --no-pager || true
+  log
+  log "Logs: journalctl --user -u $UNIT_NAME -f"
 }
 
 main "$@"

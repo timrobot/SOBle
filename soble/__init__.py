@@ -1,6 +1,6 @@
 """Host BLE API and leader-arm teleop for the SO101 platform."""
 
-from soble.sts_protocol import ARM_JOINT_COUNT
+from soble.sts_protocol import ARM_JOINT_COUNT, LEG_JOINT_COUNT
 from soble.calibration_config import (
     ArmConfig,
     CalibrationConfig,
@@ -8,10 +8,11 @@ from soble.calibration_config import (
     ScalingFactors,
 )
 from soble.so101_leader import DEFAULT_BAUD, SO101Leader
-from soble.so101_platform import SO101Platform, get_lan_ip
+from soble.so101_platform import SO101Platform, discover_named_ble_devices
 
 __all__ = [
     "ARM_JOINT_COUNT",
+    "LEG_JOINT_COUNT",
     "ArmConfig",
     "CalibrationConfig",
     "DEFAULT_BAUD",
@@ -19,7 +20,7 @@ __all__ = [
     "ScalingFactors",
     "SO101Leader",
     "SO101Platform",
-    "get_lan_ip",
+    "discover_named_ble_devices",
 ]
 
 __version__ = "0.1.0"

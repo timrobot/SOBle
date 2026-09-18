@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import multiprocessing as mp
 import platform
-import socket
 import struct
 import time
 
@@ -16,8 +14,12 @@ import numpy as np
 from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
 
-from soble import camera_stream as host_camera_stream
-from soble.sts_protocol import ARM_JOINT_COUNT, parse_arm_joints
+from soble.sts_protocol import (
+    ARM_JOINT_COUNT,
+    LEG_JOINT_COUNT,
+    parse_arm_joints,
+    parse_leg_joints,
+)
 
 # BLE worker must use spawn on Linux — fork inherits parent threads/state and breaks asyncio/BlueZ.
 MP_CTX = mp.get_context("spawn")
@@ -25,16 +27,18 @@ MP_CTX = mp.get_context("spawn")
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331d914"
 CHAR_UUID = "beb5483e-36e1-4688-b7f2-e6a6a6d74324"
 
-CMD_ACTUATOR_LEN = 13  # cmd + left + right + arm[9] + enabled — matches RobotCommand on ESP32
+CMD_ACTUATOR_LEN = 28  # cmd + 4 wheels + arm[9] + leg[12] + enables — matches RobotCommand
 CMD_RASPI_LEN = 12  # cmd + raspi union (forwarded as 7 bytes on ESP32)
 CMD_ACTUATORS = ord("0")
 CMD_TAG16H5 = ord("1")
 CMD_TAG25H9 = ord("2")
 CMD_TAG36H11 = ord("3")
-CMD_STREAM = ord("A")
 ARM_ENABLE_MASK = 0x3F  # bit0=J1 .. bit5=J6 — all arm joints engaged
+LEG_ENABLE_MASK = 0xFF  # bit0=J11 .. bit7=J18 — all leg joints engaged
+ARM_PACKED_LEN = 9
+LEG_PACKED_LEN = 12
 ARM_CENTER_RAW = 2048  # mid of 0..4095 — default when leader not connected
-STATE_LEN = 201
+STATE_LEN = 216  # wheelEnc[6] + arm[9] + leg[12] + quat[8] + ntags + tags[180]
 
 
 async def _prepare_ble_link(
@@ -93,73 +97,8 @@ TAG_CORNER_SCALE = 25.0
 AprilTagList = list[tuple[int, tuple[int, ...]]]
 
 
-def _is_lan_ipv4(ip: str) -> bool:
-    try:
-        addr = ipaddress.IPv4Address(ip)
-    except ValueError:
-        return False
-    return not addr.is_loopback and (addr.is_private or addr.is_link_local)
-
-
-def _ipv4_from_interface(ifname: str) -> str | None:
-    """Linux/macOS: IPv4 bound to a named interface."""
-    if platform.system() == "Windows":
-        return None
-    try:
-        import fcntl
-    except ImportError:
-        return None
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        ifreq = struct.pack("256s", ifname[:15].encode())
-        res = fcntl.ioctl(sock.fileno(), 0x8915, ifreq)  # SIOCGIFADDR
-        return socket.inet_ntoa(res[20:24])
-    except OSError:
-        return None
-    finally:
-        sock.close()
-
-
-def get_lan_ip() -> str:
-    """Return this computer's IPv4 on the local network (Wi‑Fi/Ethernet), not the public WAN address.
-
-    Uses the default-route interface when possible; otherwise scans non-loopback interfaces.
-    """
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            # No packets need to reach the internet; picks the LAN-facing interface.
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            if _is_lan_ipv4(ip):
-                return ip
-    except OSError:
-        pass
-
-    if platform.system() != "Windows":
-        prefer = ("wlan", "wlp", "wifi", "en", "eth")
-        ranked: list[tuple[int, str]] = []
-        for _, ifname in socket.if_nameindex():
-            name = ifname.decode() if isinstance(ifname, bytes) else ifname
-            if name == "lo" or name.startswith(("docker", "br-", "veth", "virbr")):
-                continue
-            ip = _ipv4_from_interface(name)
-            if ip and _is_lan_ipv4(ip):
-                rank = next(
-                    (i for i, prefix in enumerate(prefer) if name.startswith(prefix)),
-                    len(prefer),
-                )
-                ranked.append((rank, ip))
-        if ranked:
-            ranked.sort(key=lambda item: item[0])
-            return ranked[0][1]
-
-    raise RuntimeError(
-        "Could not determine LAN IPv4; pass host= to videoCapture()"
-    )
-
-
-def _pack_arm12(joints: list[int]) -> bytes:
-    packed = bytearray(9)
+def _pack_u12(joints: list[int], packed_len: int) -> bytes:
+    packed = bytearray(packed_len)
     byteidx = 0
     insert2 = True
     for v in joints:
@@ -177,12 +116,12 @@ def _pack_arm12(joints: list[int]) -> bytes:
     return bytes(packed)
 
 
-def _unpack_arm12(packed: bytes) -> list[int]:
+def _unpack_u12(packed: bytes, count: int) -> list[int]:
     out: list[int] = []
     byteidx = 0
     extract2 = True
     b = 0
-    for _ in range(ARM_JOINT_COUNT):
+    for _ in range(count):
         a = packed[byteidx]
         byteidx += 1
         if extract2:
@@ -196,42 +135,81 @@ def _unpack_arm12(packed: bytes) -> list[int]:
     return out
 
 
-def _unpack_enc12(packed: bytes) -> tuple[int, int]:
-    left = packed[0] | ((packed[1] & 0x0F) << 8)
-    right = ((packed[1] >> 4) & 0x0F) | (packed[2] << 4)
-    return left & 0x0FFF, right & 0x0FFF
+def _pack_arm12(joints: list[int]) -> bytes:
+    return _pack_u12(joints, ARM_PACKED_LEN)
+
+
+def _unpack_arm12(packed: bytes) -> list[int]:
+    return _unpack_u12(packed, ARM_JOINT_COUNT)
+
+
+def _pack_leg12(joints: list[int]) -> bytes:
+    return _pack_u12(joints, LEG_PACKED_LEN)
+
+
+def _unpack_leg12(packed: bytes) -> list[int]:
+    return _unpack_u12(packed, LEG_JOINT_COUNT)
+
+
+def _pack_wheel_enc12(values: list[int]) -> bytes:
+    """Pack four 12-bit wheel encoders into 6 bytes."""
+    if len(values) != 4:
+        raise ValueError(f"expected 4 wheel encoders, got {len(values)}")
+    return _pack_u12([int(v) & 0x0FFF for v in values], 6)
+
+
+def _unpack_enc12(packed: bytes) -> tuple[int, int, int, int]:
+    """Unpack four 12-bit wheel encoders from 6 bytes (left1, right1, left2, right2)."""
+    vals = _unpack_u12(packed[:6], 4)
+    return vals[0], vals[1], vals[2], vals[3]
 
 
 def _pack_robot_command(
-    left: int, right: int, arm_packed: bytes, *, arm_disabled: bool = False
+    left: int,
+    right: int,
+    arm_packed: bytes,
+    *,
+    left2: int = 0,
+    right2: int = 0,
+    leg_packed: bytes | None = None,
+    arm_disabled: bool = False,
+    leg_disabled: bool = False,
 ) -> bytes:
-    """BLE teleop: cmd='0' + left + right + arm[9] + enabled (bit0=J1 .. bit5=J6)."""
-    if len(arm_packed) != 9:
+    """BLE teleop matching ESP32 RobotCommand (28 bytes)."""
+    if len(arm_packed) != ARM_PACKED_LEN:
         arm_packed = _pack_arm12([ARM_CENTER_RAW] * ARM_JOINT_COUNT)
+    if leg_packed is None or len(leg_packed) != LEG_PACKED_LEN:
+        leg_packed = _pack_leg12([ARM_CENTER_RAW] * LEG_JOINT_COUNT)
     left = max(-125, min(125, int(left)))
     right = max(-125, min(125, int(right)))
-    enabled = 0 if arm_disabled else ARM_ENABLE_MASK
-    return struct.pack("<Bbb", CMD_ACTUATORS, left, right) + arm_packed + bytes([enabled])
+    left2 = max(-125, min(125, int(left2)))
+    right2 = max(-125, min(125, int(right2)))
+    arm_enabled = 0 if arm_disabled else ARM_ENABLE_MASK
+    leg_enabled = 0 if leg_disabled else LEG_ENABLE_MASK
+    return (
+        struct.pack("<Bbbbb", CMD_ACTUATORS, left, right, left2, right2)
+        + arm_packed
+        + leg_packed
+        + bytes([arm_enabled, leg_enabled])
+    )
 
 
-def _pack_raspi_ble_command(cmd: int, ip: str = "0.0.0.0", port: int = 0) -> bytes:
-    """BLE → ESP32 → USB → Pi (detect_atags.py). cmd is '1'/'2'/'3'/'A'."""
-    ip_le = int(ipaddress.IPv4Address(ip)).to_bytes(4, "little")
-    body = ip_le + struct.pack("<H", int(port) & 0xFFFF) + b"\x00" * 5
-    return struct.pack("<B", cmd & 0xFF) + body
+def _pack_raspi_ble_command(cmd: int) -> bytes:
+    """BLE → ESP32 → USB → Pi (detect_atags.py). cmd is tag family '1'/'2'/'3'."""
+    return struct.pack("<B", cmd & 0xFF) + b"\x00" * (CMD_RASPI_LEN - 1)
 
 
 def _unpack_robot_state(data: bytes) -> dict | None:
     if len(data) < STATE_LEN:
         return None
-    enc_l, enc_r = _unpack_enc12(data[0:3])
-    arm = _unpack_arm12(data[3:12])
-    quat = struct.unpack("<hhhh", data[12:20])
-    ntags = min(data[20] & 0x1F, 10)
-    raspi_alive = (data[20] & 0x80) != 0
-    wifi_connected = (data[20] & 0x40) != 0
+    enc = _unpack_enc12(data[0:6])
+    arm = _unpack_arm12(data[6:15])
+    leg = _unpack_leg12(data[15:27])
+    quat = struct.unpack("<hhhh", data[27:35])
+    ntags = min(data[35] & 0x1F, 10)
+    raspi_alive = (data[35] & 0x80) != 0
     tags: AprilTagList = []
-    off = 21
+    off = 36
     for _ in range(ntags):
         if off + TAG_INFO_LEN > len(data):
             break
@@ -241,13 +219,13 @@ def _unpack_robot_state(data: bytes) -> dict | None:
         tags.append((tag_id, corners))
         off += TAG_INFO_LEN
     return {
-        "enc": (enc_l, enc_r),
+        "enc": enc,
         "arm": arm,
+        "leg": leg,
         "quat": quat,
         "ntags": ntags,
         "tags": tags,
         "raspi": raspi_alive,
-        "wifi": wifi_connected,
     }
 
 
@@ -295,13 +273,15 @@ def _quat_normalize(q: np.ndarray) -> np.ndarray:
 
 
 def _format_state_line(state: dict) -> str:
-    enc_l, enc_r = state["enc"]
+    enc = state["enc"]
     arm = state["arm"]
     qw, qx, qy, qz = (v / 1000.0 for v in state["quat"])
     roll, pitch, heading = _quat_to_rph_deg(qw, qx, qy, qz)
+    leg = state.get("leg", [])
     parts = [
-        f"wheel_raw L={enc_l} R={enc_r}",
+        f"wheel_raw={enc}",
         f"arm_raw={' '.join(str(a) for a in arm)}",
+        f"leg_raw={' '.join(str(a) for a in leg)}",
         f"roll={roll:6.1f} pitch={pitch:6.1f} heading={heading:6.1f}",
     ]
     if state["ntags"] > 0:
@@ -315,23 +295,25 @@ def _publish_state(
     last_notify: mp.Value,
     enc: mp.Array,
     arm_raw: mp.Array,
+    leg_raw: mp.Array,
     quat: mp.Array,
     quat0: mp.Array,
     quat0_valid: mp.Value,
     ntags: mp.Value,
     tag_blob: mp.Array,
     raspi: mp.Value,
-    wifi: mp.Value,
     lock: mp.Lock,
 ) -> None:
     qw, qx, qy, qz = (v / 1000.0 for v in state["quat"])
-    enc_l, enc_r = state["enc"]
+    enc_vals = state["enc"]
     n = min(state["ntags"], MAX_TAGS)
     with lock:
-        enc[0] = enc_l
-        enc[1] = enc_r
+        for i, v in enumerate(enc_vals):
+            enc[i] = int(v)
         for i, v in enumerate(state["arm"]):
             arm_raw[i] = v
+        for i, v in enumerate(state["leg"]):
+            leg_raw[i] = v
 
         current_q = np.array([float(qw), float(qx), float(qy), float(qz)], dtype=np.float64)
         if not bool(quat0_valid.value):
@@ -350,7 +332,6 @@ def _publish_state(
         quat[0], quat[1], quat[2], quat[3] = calibrated_q
         ntags.value = n
         raspi.value = bool(state["raspi"])
-        wifi.value = bool(state["wifi"])
         for i in range(TAG_BLOB_LEN):
             tag_blob[i] = 0
         off = 0
@@ -368,7 +349,6 @@ def _clear_state(
     last_notify: mp.Value,
     ntags: mp.Value,
     raspi: mp.Value,
-    wifi: mp.Value,
     quat0: mp.Array,
     quat0_valid: mp.Value,
     lock: mp.Lock,
@@ -378,7 +358,6 @@ def _clear_state(
         last_notify.value = 0.0
         ntags.value = 0
         raspi.value = False
-        wifi.value = False
         quat0_valid.value = False
         quat0[0], quat0[1], quat0[2], quat0[3] = 0.0, 0.0, 0.0, 0.0
 
@@ -440,27 +419,64 @@ async def _find_device(device_name: str) -> BLEDevice | None:
     return dev
 
 
+async def _discover_named_ble_devices_async(*, timeout: float = 5.0) -> list[str]:
+    """Return sorted unique advertised names from a BLE scan.
+
+    Prefers devices advertising ``SERVICE_UUID``. If none do, falls back to all
+    named advertisers so the UI still has something to pick.
+    """
+    found = await BleakScanner.discover(timeout=timeout, return_adv=True)
+    service = SERVICE_UUID.lower()
+    with_service: set[str] = set()
+    named: set[str] = set()
+    for device, adv in found.values():
+        name = (device.name or getattr(adv, "local_name", None) or "").strip()
+        if not name:
+            continue
+        named.add(name)
+        uuids = [str(u).lower() for u in (adv.service_uuids or [])]
+        if service in uuids:
+            with_service.add(name)
+    return sorted(with_service if with_service else named)
+
+
+def discover_named_ble_devices(*, timeout: float = 5.0) -> list[str]:
+    """Blocking BLE name scan for UI pickers (does not connect).
+
+    ``SO101Platform`` still requires an explicit ``device_name``; use a name
+    returned here when constructing the platform link.
+
+    Must be called from a thread that is not already running an asyncio loop
+    (e.g. a background scanner thread in the 3D viewer).
+    """
+    return asyncio.run(_discover_named_ble_devices_async(timeout=timeout))
+
+
 async def _ble_session(
     device: BLEDevice,
     log_state: bool,
     stop: mp.Event,
     left_cmd: mp.Value,
     right_cmd: mp.Value,
+    left2_cmd: mp.Value,
+    right2_cmd: mp.Value,
     arm_packed: mp.Array,
+    leg_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
     arm_positions_valid: mp.Value,
+    leg_positions_valid: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
     arm_raw: mp.Array,
+    leg_raw: mp.Array,
     quat: mp.Array,
     quat0: mp.Array,
     quat0_valid: mp.Value,
     ntags: mp.Value,
     tag_blob: mp.Array,
     raspi: mp.Value,
-    wifi: mp.Value,
     lock: mp.Lock,
 ) -> bool:
     def on_notify(_handle: int, data: bytearray) -> None:
@@ -473,13 +489,13 @@ async def _ble_session(
             last_notify,
             enc,
             arm_raw,
+            leg_raw,
             quat,
             quat0,
             quat0_valid,
             ntags,
             tag_blob,
             raspi,
-            wifi,
             lock,
         )
         if log_state:
@@ -508,7 +524,10 @@ async def _ble_session(
                     sn = float(last_notify.value)
                     left = int(left_cmd.value)
                     right = int(right_cmd.value)
+                    left2 = int(left2_cmd.value)
+                    right2 = int(right2_cmd.value)
                     arm = bytes(arm_packed[:])
+                    leg = bytes(leg_packed[:])
                 if got and sn > 0.0 and (now - sn) > STALE_NOTIFY_S:
                     print("No notify — reconnecting...", flush=True)
                     break
@@ -524,9 +543,17 @@ async def _ble_session(
                             payload = bytes(pending_ble[:n])
                             pending_ble_valid.value = False
                         else:
-                            torque_off = not bool(arm_positions_valid.value)
+                            arm_off = not bool(arm_positions_valid.value)
+                            leg_off = not bool(leg_positions_valid.value)
                             payload = _pack_robot_command(
-                                left, right, arm, arm_disabled=torque_off
+                                left,
+                                right,
+                                arm,
+                                left2=left2,
+                                right2=right2,
+                                leg_packed=leg,
+                                arm_disabled=arm_off,
+                                leg_disabled=leg_off,
                             )
                     assert len(payload) in (CMD_ACTUATOR_LEN, CMD_RASPI_LEN)
                     await client.write_gatt_char(
@@ -555,21 +582,25 @@ async def _ble_main(
     stop: mp.Event,
     left_cmd: mp.Value,
     right_cmd: mp.Value,
+    left2_cmd: mp.Value,
+    right2_cmd: mp.Value,
     arm_packed: mp.Array,
+    leg_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
     arm_positions_valid: mp.Value,
+    leg_positions_valid: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
     arm_raw: mp.Array,
+    leg_raw: mp.Array,
     quat: mp.Array,
     quat0: mp.Array,
     quat0_valid: mp.Value,
     ntags: mp.Value,
     tag_blob: mp.Array,
     raspi: mp.Value,
-    wifi: mp.Value,
     lock: mp.Lock,
 ) -> None:
     while not stop.is_set():
@@ -591,21 +622,25 @@ async def _ble_main(
                 stop,
                 left_cmd,
                 right_cmd,
+                left2_cmd,
+                right2_cmd,
                 arm_packed,
+                leg_packed,
                 pending_ble,
                 pending_ble_valid,
                 arm_positions_valid,
+                leg_positions_valid,
                 got_state,
                 last_notify,
                 enc,
                 arm_raw,
+                leg_raw,
                 quat,
                 quat0,
                 quat0_valid,
                 ntags,
                 tag_blob,
                 raspi,
-                wifi,
                 lock,
             )
         except Exception as exc:
@@ -619,7 +654,7 @@ async def _ble_main(
             print("Disconnected.", flush=True)
 
         _clear_state(
-            got_state, last_notify, ntags, raspi, wifi, quat0, quat0_valid, lock
+            got_state, last_notify, ntags, raspi, quat0, quat0_valid, lock
         )
         if stop.is_set():
             break
@@ -634,21 +669,25 @@ def _ble_worker(
     stop: mp.Event,
     left_cmd: mp.Value,
     right_cmd: mp.Value,
+    left2_cmd: mp.Value,
+    right2_cmd: mp.Value,
     arm_packed: mp.Array,
+    leg_packed: mp.Array,
     pending_ble: mp.Array,
     pending_ble_valid: mp.Value,
     arm_positions_valid: mp.Value,
+    leg_positions_valid: mp.Value,
     got_state: mp.Value,
     last_notify: mp.Value,
     enc: mp.Array,
     arm_raw: mp.Array,
+    leg_raw: mp.Array,
     quat: mp.Array,
     quat0: mp.Array,
     quat0_valid: mp.Value,
     ntags: mp.Value,
     tag_blob: mp.Array,
     raspi: mp.Value,
-    wifi: mp.Value,
     lock: mp.Lock,
 ) -> None:
     asyncio.run(
@@ -659,21 +698,25 @@ def _ble_worker(
             stop,
             left_cmd,
             right_cmd,
+            left2_cmd,
+            right2_cmd,
             arm_packed,
+            leg_packed,
             pending_ble,
             pending_ble_valid,
             arm_positions_valid,
+            leg_positions_valid,
             got_state,
             last_notify,
             enc,
             arm_raw,
+            leg_raw,
             quat,
             quat0,
             quat0_valid,
             ntags,
             tag_blob,
             raspi,
-            wifi,
             lock,
         )
     )
@@ -702,16 +745,23 @@ class SO101Platform:
         self._stop = MP_CTX.Event()
         self._left_cmd = MP_CTX.Value("i", 0)
         self._right_cmd = MP_CTX.Value("i", 0)
+        self._left2_cmd = MP_CTX.Value("i", 0)
+        self._right2_cmd = MP_CTX.Value("i", 0)
         self._arm_packed = MP_CTX.Array(
             "B", _pack_arm12([ARM_CENTER_RAW] * ARM_JOINT_COUNT)
+        )
+        self._leg_packed = MP_CTX.Array(
+            "B", _pack_leg12([ARM_CENTER_RAW] * LEG_JOINT_COUNT)
         )
         self._pending_ble = MP_CTX.Array("B", CMD_ACTUATOR_LEN)
         self._pending_ble_valid = MP_CTX.Value("b", False)
         self._arm_positions_valid = MP_CTX.Value("b", False)
+        self._leg_positions_valid = MP_CTX.Value("b", False)
         self._got_state = MP_CTX.Value("b", False)
         self._last_notify = MP_CTX.Value("d", 0.0)
-        self._enc = MP_CTX.Array("i", 2)
+        self._enc = MP_CTX.Array("i", 4)
         self._arm_raw = MP_CTX.Array("i", ARM_JOINT_COUNT)
+        self._leg_raw = MP_CTX.Array("i", LEG_JOINT_COUNT)
         self._quat = MP_CTX.Array("d", 4)
         self._quat[0] = 1.0
         self._quat0 = MP_CTX.Array("d", 4)
@@ -719,17 +769,7 @@ class SO101Platform:
         self._ntags = MP_CTX.Value("i", 0)
         self._tag_blob = MP_CTX.Array("B", TAG_BLOB_LEN)
         self._raspi = MP_CTX.Value("b", False)
-        self._wifi = MP_CTX.Value("b", False)
         self._proc: mp.Process | None = None
-
-        self._stream_proc: mp.Process | None = None
-        self._stream_stop = MP_CTX.Event()
-        self._frame_buf = MP_CTX.Array("B", host_camera_stream.SHARED_FRAME_BYTES)
-        self._frame_write_slot = MP_CTX.Value("i", 0)
-        self._frame_read_slot = MP_CTX.Value("i", 0)
-        self._frame_ready = MP_CTX.Event()
-        self._frame_seq = MP_CTX.Value("Q", 0)
-        self._frame_lock = MP_CTX.Lock()
 
         if autostart:
             self.start()
@@ -744,9 +784,15 @@ class SO101Platform:
                 return None
             return time.monotonic() - float(self._last_notify.value)
 
-    def wheelEncoders(self) -> tuple[int, int]:
+    def wheelEncoders(self) -> tuple[int, int, int, int]:
+        """(left1, right1, left2, right2), each 0..4095."""
         with self._lock:
-            return int(self._enc[0]), int(self._enc[1])
+            return (
+                int(self._enc[0]),
+                int(self._enc[1]),
+                int(self._enc[2]),
+                int(self._enc[3]),
+            )
 
     def getArmPositions(self) -> list[int]:
         """Six joint raw encoder values (J1..J6, 0..4095) from last robot notify."""
@@ -755,6 +801,14 @@ class SO101Platform:
                 return []
             return [int(self._arm_raw[i]) for i in range(ARM_JOINT_COUNT)]
 
+    def getLegPositions(self) -> list[int]:
+        """Eight leg joint raw encoder values (J11..J18, 0..4095) from last notify."""
+        with self._lock:
+            if not self._got_state.value:
+                return []
+            return [int(self._leg_raw[i]) for i in range(LEG_JOINT_COUNT)]
+
+    # Singular aliases matching the public API name.
     def imuQuaternion(self) -> tuple[float, float, float, float]:
         """Unit quaternion (w, x, y, z)."""
         with self._lock:
@@ -774,10 +828,6 @@ class SO101Platform:
         with self._lock:
             return bool(self._raspi.value)
 
-    def wifiOnline(self) -> bool:
-        """True if the Pi reported WiFi connected (serial status byte bit 7 / BLE ntags bit 6)."""
-        with self._lock:
-            return bool(self._wifi.value)
 
     def detectApriltags(
         self,
@@ -838,10 +888,27 @@ class SO101Platform:
                 self._arm_packed[i] = byte
             self._arm_positions_valid.value = True
 
-    def drive(self, left: int, right: int) -> None:
+    def setLegPositions(
+        self, joints: list[int] | tuple[int, ...] | np.ndarray
+    ) -> None:
+        """Drive leg joints (J11..J18), or pass ``[]`` to release torque."""
+        parsed = parse_leg_joints(joints)
+        with self._lock:
+            if parsed is None:
+                self._leg_positions_valid.value = False
+                return
+            packed = _pack_leg12(parsed)
+            for i, byte in enumerate(packed):
+                self._leg_packed[i] = byte
+            self._leg_positions_valid.value = True
+
+    def drive(self, left: int, right: int, left2: int = 0, right2: int = 0) -> None:
+        """Tank / omni wheel speeds. ``left2``/``right2`` default 0 for two-wheel mode."""
         with self._lock:
             self._left_cmd.value = max(-125, min(125, int(left)))
             self._right_cmd.value = max(-125, min(125, int(right)))
+            self._left2_cmd.value = max(-125, min(125, int(left2)))
+            self._right2_cmd.value = max(-125, min(125, int(right2)))
 
     def _queue_ble_command(self, payload: bytes) -> None:
         if len(payload) not in (CMD_ACTUATOR_LEN, CMD_RASPI_LEN):
@@ -856,45 +923,8 @@ class SO101Platform:
                 self._pending_ble[i] = byte
             self._pending_ble_valid.value = True
 
-    def _stop_camera_stream_receiver(self) -> None:
-        self._stream_stop.set()
-        host_camera_stream.stop_receive_stream(self._stream_proc, self._stream_stop)
-        self._stream_proc = None
-        self._stream_stop.clear()
-        self._frame_ready.clear()
-        with self._frame_lock:
-            self._frame_seq.value = 0
-            self._frame_write_slot.value = 0
-            self._frame_read_slot.value = 0
-
-    def imread(self, copy: bool = True) -> np.ndarray | None:
-        """Get latest frame as a numpy array, zero-copy from shared memory by default if copy=False."""
-        if self._stream_proc is None or not self._stream_proc.is_alive():
-            return None
-        if int(self._frame_seq.value) == 0:
-            return None
-        with self._frame_lock:
-            slot = int(self._frame_read_slot.value)
-            offset = slot * host_camera_stream.STREAM_FRAME_BYTES
-            
-            # Map the zero-copy view over the shared memory segment
-            arr = np.frombuffer(
-                self._frame_buf.get_obj(),
-                dtype=np.uint8,
-                count=host_camera_stream.STREAM_FRAME_BYTES,
-                offset=offset,
-            ).reshape((
-                host_camera_stream.STREAM_HEIGHT,
-                host_camera_stream.STREAM_WIDTH,
-                host_camera_stream.STREAM_CHANNELS,
-            ))
-            
-            # Conditionally copy or return the raw view pointer
-            return arr if not copy else arr.copy()
-
     def setTagFamily(self, family: str) -> None:
-        """Forward tag family to the Pi ('tag16h5', 'tag25h9', 'tag36h11'). Stops host RTP receiver."""
-        self._stop_camera_stream_receiver()
+        """Forward tag family to the Pi ('tag16h5', 'tag25h9', 'tag36h11')."""
         fam = family.lower().replace("-", "").replace("_", "")
         cmd_by_family = {
             "tag16h5": CMD_TAG16H5,
@@ -904,52 +934,6 @@ class SO101Platform:
         if fam not in cmd_by_family:
             raise ValueError(f"Unknown tag family {family!r}")
         self._queue_ble_command(_pack_raspi_ble_command(cmd_by_family[fam]))
-
-    def videoCapture(
-        self,
-        *,
-        host: str | None = None,
-        port: int = 5000,
-        wait_wifi_s: float = 15.0,
-    ) -> str:
-        """Start Pi RTP camera stream (1280×720 BGR). Read frames with :meth:`imread`.
-
-        Args:
-            host: Destination IP for the Pi RTP sender; default is this PC's LAN IP.
-            port: UDP port (default 5000).
-            wait_wifi_s: Seconds to wait for Pi WiFi status over BLE before failing.
-
-        Returns the host IP sent to the Pi.
-        """
-        deadline = time.monotonic() + max(0.0, wait_wifi_s)
-        while not self.wifiOnline():
-            if not self.running:
-                raise RuntimeError("BLE worker not running")
-            if time.monotonic() >= deadline:
-                raise RuntimeError(
-                    "WiFi not connected on Pi (timed out waiting for BLE status)"
-                )
-            time.sleep(0.05)
-
-        self._stop_camera_stream_receiver()
-
-        if host is None:
-            host = get_lan_ip()
-
-        self._stream_proc = host_camera_stream.run_receive_stream(
-            port,
-            self._frame_buf,
-            self._frame_write_slot,
-            self._frame_read_slot,
-            self._frame_ready,
-            self._frame_seq,
-            self._frame_lock,
-            self._stream_stop,
-            mp_context=MP_CTX,
-        )
-
-        self._queue_ble_command(_pack_raspi_ble_command(CMD_STREAM, host, port))
-        return host
 
     def start(self) -> None:
         """Start (or restart) the BLE worker. Called automatically from ``__init__``."""
@@ -966,21 +950,25 @@ class SO101Platform:
                 self._stop,
                 self._left_cmd,
                 self._right_cmd,
+                self._left2_cmd,
+                self._right2_cmd,
                 self._arm_packed,
+                self._leg_packed,
                 self._pending_ble,
                 self._pending_ble_valid,
                 self._arm_positions_valid,
+                self._leg_positions_valid,
                 self._got_state,
                 self._last_notify,
                 self._enc,
                 self._arm_raw,
+                self._leg_raw,
                 self._quat,
                 self._quat0,
                 self._quat0_valid,
                 self._ntags,
                 self._tag_blob,
                 self._raspi,
-                self._wifi,
                 self._lock,
             ),
             daemon=True,
@@ -988,12 +976,11 @@ class SO101Platform:
         self._proc.start()
 
     def stop(self) -> None:
-        """Stop BLE worker and camera stream. Called automatically from ``__del__``."""
+        """Stop BLE worker. Called automatically from ``__del__``."""
         if self._closed:
             return
         self._closed = True
         self._stop.set()
-        self._stop_camera_stream_receiver()
         if self._proc is not None:
             self._proc.join(timeout=3.0)
             self._proc = None
@@ -1002,7 +989,6 @@ class SO101Platform:
             self._last_notify,
             self._ntags,
             self._raspi,
-            self._wifi,
             self._quat0,
             self._quat0_valid,
             self._lock,
