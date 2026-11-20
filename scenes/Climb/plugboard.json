@@ -1,0 +1,266 @@
+{
+  "connectivity": "ble",
+  "microcontrollers": {
+    "0": {
+      "motor_control": {
+        "msgtype": "outgoing",
+        "cmdid": 0,
+        "body": [
+          {
+            "name": "front_left_wheel",
+            "dtype": "int8"
+          },
+          {
+            "name": "front_right_wheel",
+            "dtype": "int8"
+          },
+          {
+            "name": "rear_left_wheel",
+            "dtype": "int8"
+          },
+          {
+            "name": "rear_right_wheel",
+            "dtype": "int8"
+          },
+          {
+            "name": "J1",
+            "dtype": "uint16"
+          },
+          {
+            "name": "J2",
+            "dtype": "uint16"
+          },
+          {
+            "name": "J3",
+            "dtype": "uint16"
+          }
+        ]
+      },
+      "sensor_data": {
+        "msgtype": "incoming",
+        "responseid": 0,
+        "body": [
+          {
+            "name": "J1",
+            "dtype": "uint16",
+            "count": 1
+          },
+          {
+            "name": "J2",
+            "dtype": "uint16",
+            "count": 1
+          },
+          {
+            "name": "J3",
+            "dtype": "uint16",
+            "count": 1
+          },
+          {
+            "name": "J1_secondary",
+            "dtype": "int32"
+          },
+          {
+            "name": "J2_secondary",
+            "dtype": "int32"
+          },
+          {
+            "name": "J3_secondary",
+            "dtype": "int32"
+          }
+        ]
+      }
+    }
+  },
+  "mujoco": {
+    "actuators": {
+      "front_left_wheel": {
+        "physical": {
+          "range": [
+            -100,
+            100
+          ]
+        },
+        "simulation": {
+          "range": [
+            -5,
+            5
+          ]
+        },
+        "type": "velocity",
+        "showVelocityReading": false
+      },
+      "front_right_wheel": {
+        "physical": {
+          "range": [
+            -100,
+            100
+          ]
+        },
+        "simulation": {
+          "range": [
+            -5,
+            5
+          ]
+        },
+        "type": "velocity",
+        "showVelocityReading": false
+      },
+      "rear_left_wheel": {
+        "physical": {
+          "range": [
+            -100,
+            100
+          ]
+        },
+        "simulation": {
+          "range": [
+            -5,
+            5
+          ]
+        },
+        "type": "velocity",
+        "showVelocityReading": false
+      },
+      "rear_right_wheel": {
+        "physical": {
+          "range": [
+            -100,
+            100
+          ]
+        },
+        "simulation": {
+          "range": [
+            -5,
+            5
+          ]
+        },
+        "type": "velocity",
+        "showVelocityReading": false
+      },
+      "J1": {
+        "physical": {
+          "range": [
+            981,
+            3029
+          ]
+        },
+        "simulation": {
+          "range": [
+            -90,
+            90
+          ]
+        },
+        "type": "position",
+        "displayStyle": "dial",
+        "secondary": {
+          "name": "J1_secondary",
+          "dtype": "int32"
+        }
+      },
+      "J2": {
+        "physical": {
+          "range": [
+            1207,
+            3084
+          ]
+        },
+        "simulation": {
+          "range": [
+            0,
+            165
+          ]
+        },
+        "type": "position",
+        "invert": true,
+        "displayStyle": "dial",
+        "secondary": {
+          "name": "J2_secondary",
+          "dtype": "int32"
+        }
+      },
+      "J3": {
+        "physical": {
+          "range": [
+            1070,
+            2834
+          ]
+        },
+        "simulation": {
+          "range": [
+            0,
+            155
+          ]
+        },
+        "type": "position",
+        "displayStyle": "dial",
+        "secondary": {
+          "name": "J3_secondary",
+          "dtype": "int32"
+        }
+      }
+    },
+    "sensors": {
+      "step_1_pad": {
+        "ignore": true
+      },
+      "step_2_pad": {
+        "ignore": true
+      },
+      "step_3_pad": {
+        "ignore": true
+      },
+      "step_4_pad": {
+        "ignore": true
+      },
+      "step_5_pad": {
+        "ignore": true
+      },
+      "step_6_pad": {
+        "ignore": true
+      },
+      "step_7_pad": {
+        "ignore": true
+      },
+      "step_8_pad": {
+        "ignore": true
+      },
+      "step_9_pad": {
+        "ignore": true
+      },
+      "goal_pad": {
+        "ignore": true
+      },
+      "foot_bottom": {
+        "ignore": true
+      }
+    }
+  },
+  "skills": {
+    "climb": {
+      "enabled": true,
+      "input_output": [
+        "front_left_wheel",
+        "front_right_wheel",
+        "rear_left_wheel",
+        "rear_right_wheel",
+        "J1",
+        "J2",
+        "J3"
+      ],
+      "gamepad": "generic",
+      "script": "climb.js",
+      "gauge": {
+        "height": {
+          "type": "position",
+          "simulation": { "range": [2.06, 10.7] },
+          "displayMode": "slider"
+        },
+        "forward": {
+          "type": "position",
+          "simulation": { "range": [1.05, 11.6] },
+          "displayMode": "slider"
+        }
+      }
+    }
+  }
+}
