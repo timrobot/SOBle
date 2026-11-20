@@ -314,22 +314,22 @@
       <site name="ray_179" pos="-0.08255 0 0.3048" zaxis="0.99939083 0 0.03489950" size="0.004" group="3"/>
       <geom name="chassis" group="1" type="capsule" material="chassis" mass="0.9" size="0.00635" fromto="-0.08255 0 0 0.08255 0 0"/>
 
-      <body name="front_left_wheel" pos="0.08255 -0.1397 0">
+      <body name="front_left_mecanum_wheel" pos="0.08255 -0.1397 0">
         <joint name="front_left_axle" type="hinge" axis="0 1 0"/>
-        <geom name="front_left_wheel" group="1" type="capsule" material="wheel" mass="1.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
+        <geom name="front_left_mecanum_wheel" group="1" type="capsule" material="wheel" mass="1.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
       </body>
-      <body name="front_right_wheel" pos="0.08255 0.1397 0">
+      <body name="front_right_mecanum_wheel" pos="0.08255 0.1397 0">
         <joint name="front_right_axle" type="hinge" axis="0 1 0"/>
-        <geom name="front_right_wheel" group="1" type="capsule" material="wheel" mass="1.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
+        <geom name="front_right_mecanum_wheel" group="1" type="capsule" material="wheel" mass="1.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
       </body>
 
-      <body name="rear_left_wheel" pos="-0.08255 -0.1397 0">
+      <body name="rear_left_mecanum_wheel" pos="-0.08255 -0.1397 0">
         <joint name="rear_left_axle" type="hinge" axis="0 1 0"/>
-        <geom name="rear_left_wheel" group="1" type="capsule" material="wheel" mass="0.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
+        <geom name="rear_left_mecanum_wheel" group="1" type="capsule" material="wheel" mass="0.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
       </body>
-      <body name="rear_right_wheel" pos="-0.08255 0.1397 0">
+      <body name="rear_right_mecanum_wheel" pos="-0.08255 0.1397 0">
         <joint name="rear_right_axle" type="hinge" axis="0 1 0"/>
-        <geom name="rear_right_wheel" group="1" type="capsule" material="wheel" mass="0.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
+        <geom name="rear_right_mecanum_wheel" group="1" type="capsule" material="wheel" mass="0.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
       </body>
 
       <!--
@@ -364,14 +364,14 @@
       chassis body, so MuJoCo does not generate that parent-child pair.
       The foot passes through both wheels so the sole can sit under the body.
     -->
-    <exclude body1="rear_left_wheel" body2="L1"/>
-    <exclude body1="rear_right_wheel" body2="L1"/>
-    <exclude body1="rear_left_wheel" body2="L2"/>
-    <exclude body1="rear_right_wheel" body2="L2"/>
-    <exclude body1="front_left_wheel" body2="foot"/>
-    <exclude body1="front_right_wheel" body2="foot"/>
-    <exclude body1="rear_left_wheel" body2="foot"/>
-    <exclude body1="rear_right_wheel" body2="foot"/>
+    <exclude body1="rear_left_mecanum_wheel" body2="L1"/>
+    <exclude body1="rear_right_mecanum_wheel" body2="L1"/>
+    <exclude body1="rear_left_mecanum_wheel" body2="L2"/>
+    <exclude body1="rear_right_mecanum_wheel" body2="L2"/>
+    <exclude body1="front_left_mecanum_wheel" body2="foot"/>
+    <exclude body1="front_right_mecanum_wheel" body2="foot"/>
+    <exclude body1="rear_left_mecanum_wheel" body2="foot"/>
+    <exclude body1="rear_right_mecanum_wheel" body2="foot"/>
     <!-- The foot tucks against the thigh and under the chassis. -->
     <exclude body1="L1" body2="foot"/>
     <exclude body1="robot" body2="foot"/>
@@ -380,17 +380,16 @@
   <!--
     Each half of an axle has its own velocity actuator. Both halves are
     commanded at the same speed. Positive command rolls that wheel toward the stairs.
-    Control is wheel speed in rad/s, limited to ±75 rpm. Torque is limited to ±5 Nm.
-    J1 and J2 are position servos limited to ±40 Nm and 15 rpm. J3 is limited to
-    ±40 Nm and 20 rpm. The gain is high because the hardware PID holds the
-    commanded angle. J3 is set from the
-    current J1 and J2 so the foot stays parallel to the body.
+    Control is wheel speed in rad/s, limited to ±100 rpm (~±10.472). No forcerange on
+    the wheels (MuJoCo unlimited torque). J1–J3 position servos use forcerange ±40 Nm.
+    The gain is high because the hardware PID holds the commanded angle. J3 is set from
+    the current J1 and J2 so the foot stays parallel to the body.
   -->
   <actuator>
-    <velocity name="front_left_wheel" joint="front_left_axle" kv="1" ctrlrange="-7.85398163 7.85398163" forcerange="-5 5"/>
-    <velocity name="front_right_wheel" joint="front_right_axle" kv="1" ctrlrange="-7.85398163 7.85398163" forcerange="-5 5"/>
-    <velocity name="rear_left_wheel" joint="rear_left_axle" kv="1" ctrlrange="-7.85398163 7.85398163" forcerange="-5 5"/>
-    <velocity name="rear_right_wheel" joint="rear_right_axle" kv="1" ctrlrange="-7.85398163 7.85398163" forcerange="-5 5"/>
+    <velocity name="front_left_mecanum_wheel" joint="front_left_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
+    <velocity name="front_right_mecanum_wheel" joint="front_right_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
+    <velocity name="rear_left_mecanum_wheel" joint="rear_left_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
+    <velocity name="rear_right_mecanum_wheel" joint="rear_right_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
     <position name="J1" joint="J1" kp="2000" dampratio="1" ctrlrange="-1.5707963 1.5707963" forcerange="-40 40"/>
     <position name="J2" joint="J2" kp="2000" dampratio="1" ctrlrange="0 2.8797933" forcerange="-40 40"/>
     <position name="J3" joint="J3" kp="2000" dampratio="1" ctrlrange="0 2.7052603" forcerange="-40 40"/>

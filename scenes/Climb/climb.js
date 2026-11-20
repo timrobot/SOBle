@@ -28,8 +28,11 @@ const KEY3_HEIGHT_IN = 2.06;
 const KEY2_FORWARD_IN = 11.6;
 const HOME_FORWARD_IN = 1.05;
 const WHEEL_ROLL_MIN_HEIGHT_IN = 5.0;
-const KEY2_WHEEL = 3;
-const KEY4_WHEEL = -3;
+/** Drive wheels: ±100 rpm → rad/s (joint 3 rpm is separate — MAX_RPM below). */
+const WHEEL_RPM = 100;
+const WHEEL_RAD_S = (WHEEL_RPM * 2 * Math.PI) / 60;
+const KEY2_WHEEL = WHEEL_RAD_S;
+const KEY4_WHEEL = -WHEEL_RAD_S;
 
 /** model.md joint planner */
 const LOOKAHEAD_S = 0.1;
@@ -329,30 +332,30 @@ function planJointStep(j1, j2, j3, axis, targetH, targetF, curH, curF) {
 function omniWheels(gamepad) {
   if (!gamepad) {
     return {
-      front_left_wheel: 0,
-      front_right_wheel: 0,
-      rear_left_wheel: 0,
-      rear_right_wheel: 0,
+      front_left_mecanum_wheel: 0,
+      front_right_mecanum_wheel: 0,
+      rear_left_mecanum_wheel: 0,
+      rear_right_mecanum_wheel: 0,
     };
   }
   const lx = gamepad.lx ?? 0;
   const fwd = -(gamepad.ly ?? 0);
   const rx = gamepad.rx ?? 0;
   return {
-    front_left_wheel: clamp((lx + fwd + rx) * 3, -3, 3),
-    front_right_wheel: clamp((-lx + fwd - rx) * 3, -3, 3),
-    rear_left_wheel: clamp((-lx + fwd + rx) * 3, -3, 3),
-    rear_right_wheel: clamp((lx + fwd - rx) * 3, -3, 3),
+    front_left_mecanum_wheel: clamp((lx + fwd + rx) * WHEEL_RAD_S, -WHEEL_RAD_S, WHEEL_RAD_S),
+    front_right_mecanum_wheel: clamp((-lx + fwd - rx) * WHEEL_RAD_S, -WHEEL_RAD_S, WHEEL_RAD_S),
+    rear_left_mecanum_wheel: clamp((-lx + fwd + rx) * WHEEL_RAD_S, -WHEEL_RAD_S, WHEEL_RAD_S),
+    rear_right_mecanum_wheel: clamp((lx + fwd - rx) * WHEEL_RAD_S, -WHEEL_RAD_S, WHEEL_RAD_S),
   };
 }
 
 function tankWheels(cmd) {
-  const v = clamp(cmd, -3, 3);
+  const v = clamp(cmd, -WHEEL_RAD_S, WHEEL_RAD_S);
   return {
-    front_left_wheel: v,
-    front_right_wheel: v,
-    rear_left_wheel: v,
-    rear_right_wheel: v,
+    front_left_mecanum_wheel: v,
+    front_right_mecanum_wheel: v,
+    rear_left_mecanum_wheel: v,
+    rear_right_mecanum_wheel: v,
   };
 }
 

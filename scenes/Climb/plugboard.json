@@ -6,22 +6,22 @@
         "type": "outgoing",
         "cmdid": 0,
         "body": {
-          "front_left_wheel": {
+          "front_left_mecanum_wheel": {
             "dtype": "int8",
             "min_limit": -100,
             "max_limit": 100
           },
-          "front_right_wheel": {
+          "front_right_mecanum_wheel": {
             "dtype": "int8",
             "min_limit": -100,
             "max_limit": 100
           },
-          "rear_left_wheel": {
+          "rear_left_mecanum_wheel": {
             "dtype": "int8",
             "min_limit": -100,
             "max_limit": 100
           },
-          "rear_right_wheel": {
+          "rear_right_mecanum_wheel": {
             "dtype": "int8",
             "min_limit": -100,
             "max_limit": 100
@@ -88,10 +88,10 @@
     "climb": {
       "enabled": true,
       "input_output": [
-        "front_left_wheel",
-        "front_right_wheel",
-        "rear_left_wheel",
-        "rear_right_wheel",
+        "front_left_mecanum_wheel",
+        "front_right_mecanum_wheel",
+        "rear_left_mecanum_wheel",
+        "rear_right_mecanum_wheel",
         "J1",
         "J2",
         "J3"
@@ -116,28 +116,28 @@
   },
   "interface": {
     "control": {
-      "front_left_wheel": {
+      "front_left_mecanum_wheel": {
         "type": "velocity",
-        "min_limit": -5,
-        "max_limit": 5,
+        "min_limit": -10.472,
+        "max_limit": 10.472,
         "showVelocityReading": false
       },
-      "front_right_wheel": {
+      "front_right_mecanum_wheel": {
         "type": "velocity",
-        "min_limit": -5,
-        "max_limit": 5,
+        "min_limit": -10.472,
+        "max_limit": 10.472,
         "showVelocityReading": false
       },
-      "rear_left_wheel": {
+      "rear_left_mecanum_wheel": {
         "type": "velocity",
-        "min_limit": -5,
-        "max_limit": 5,
+        "min_limit": -10.472,
+        "max_limit": 10.472,
         "showVelocityReading": false
       },
-      "rear_right_wheel": {
+      "rear_right_mecanum_wheel": {
         "type": "velocity",
-        "min_limit": -5,
-        "max_limit": 5,
+        "min_limit": -10.472,
+        "max_limit": 10.472,
         "showVelocityReading": false
       },
       "J1": {

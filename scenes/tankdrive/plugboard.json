@@ -1,0 +1,80 @@
+{
+  "connectivity": "ble",
+  "microcontrollers": {
+    "0": {
+      "motor_control": {
+        "type": "outgoing",
+        "cmdid": 0,
+        "body": {
+          "front_left_mecanum_wheel": {
+            "dtype": "int8",
+            "min_limit": -100,
+            "max_limit": 100
+          },
+          "front_right_mecanum_wheel": {
+            "dtype": "int8",
+            "min_limit": -100,
+            "max_limit": 100
+          },
+          "rear_left_mecanum_wheel": {
+            "dtype": "int8",
+            "min_limit": -100,
+            "max_limit": 100
+          },
+          "rear_right_mecanum_wheel": {
+            "dtype": "int8",
+            "min_limit": -100,
+            "max_limit": 100
+          }
+        }
+      },
+      "sensor_data": {
+        "type": "incoming",
+        "responseid": 0,
+        "body": {}
+      }
+    }
+  },
+  "skills": {
+    "tankdrive": {
+      "enabled": true,
+      "input_output": [
+        "front_left_mecanum_wheel",
+        "front_right_mecanum_wheel",
+        "rear_left_mecanum_wheel",
+        "rear_right_mecanum_wheel"
+      ],
+      "gamepad": "generic",
+      "script": "tankdrive.js"
+    }
+  },
+  "interface": {
+    "control": {
+      "front_left_mecanum_wheel": {
+        "type": "velocity",
+        "min_limit": -10.472,
+        "max_limit": 10.472,
+        "showVelocityReading": false
+      },
+      "front_right_mecanum_wheel": {
+        "type": "velocity",
+        "min_limit": -10.472,
+        "max_limit": 10.472,
+        "showVelocityReading": false
+      },
+      "rear_left_mecanum_wheel": {
+        "type": "velocity",
+        "min_limit": -10.472,
+        "max_limit": 10.472,
+        "showVelocityReading": false
+      },
+      "rear_right_mecanum_wheel": {
+        "type": "velocity",
+        "min_limit": -10.472,
+        "max_limit": 10.472,
+        "showVelocityReading": false
+      }
+    },
+    "sensors": {}
+  }
+}

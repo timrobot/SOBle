@@ -1,0 +1,300 @@
+<mujoco model="tankdrive">
+  <!--
+    Lengths in this file are meters. Inch sizes from the spec:
+      1 inch            = 0.0254 m
+      stair rise        = 8 in   = 0.2032 m
+      stair tread       = 10 in  = 0.254 m
+      stair width       = 48 in  = 1.2192 m   (not specified; wide enough for the wheel track)
+      landing length    = 120 in = 3.048 m    (continues past the 9th tread)
+      wheel radius      = 2 in   = 0.0508 m
+      wheel half length = 3 in   = 0.0762 m   (cylindrical length of each left/right capsule)
+      wheel track       = 11 in  = 0.2794 m   (left/right capsule centers, symmetric)
+      wheel separation  = 6.5 in = 0.1651 m   (front/rear axle centers, along x)
+      chassis radius    = 0.25 in = 0.00635 m
+      (Flat-ground drive test: Climb wheels/chassis only — no leg, no stairs.)
+      front clearance   = 4 in   = 0.1016 m   (gap from the front of the front wheel to the first riser)
+      sensor pad        = 1 mm thick, 5 in deep (center half of the 10 in tread)
+
+    Stairs run in +x. The first riser is the plane x = 0. Each tread is a solid box
+    from the ground up to that step's height, so the side profile is a staircase.
+    The center 5 in of the top 1 mm of every tread is a separate collision pad. A touch sensor on a
+    matching site reports the normal contact force on that pad, in newtons.
+    The 9th tread top is at z = 1.8288 m and ends at x = 2.286 m. The landing is a
+    box, not a MuJoCo plane: plane geoms are infinite half-spaces, so a plane at
+    landing height would solid-fill everything below it and bury the stairs.
+  -->
+  <compiler angle="degree" autolimits="true"/>
+
+  <option gravity="0 0 -9.81" timestep="0.002" integrator="implicitfast"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.35 0.35 0.35" specular="0.15 0.15 0.15"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="130" elevation="-20" offwidth="1280" offheight="720"/>
+  </visual>
+
+  <default>
+    <geom contype="1" conaffinity="1" condim="3" friction="1 0.005 0.0001" solref="0.02 1" solimp="0.9 0.95 0.001"/>
+    <joint damping="0.02" armature="0.01"/>
+  </default>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.4 0.6 0.8" rgb2="0.05 0.08 0.12" width="512" height="3072"/>
+    <texture name="groundplane" type="2d" builtin="checker" mark="edge" rgb1="0.85 0.85 0.85" rgb2="0.65 0.65 0.65" markrgb="0.9 0.9 0.9" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="8 8" reflectance="0.05"/>
+    <material name="chassis" rgba="0.2 0.35 0.75 1"/>
+    <material name="wheel" rgba="0.12 0.12 0.12 1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 4" dir="0 0 -1" directional="true"/>
+    <camera name="side" pos="-0.4 -3.2 1.4" xyaxes="1 0 0 0 0.35 0.94"/>
+
+    <geom name="ground" type="plane" size="6 4 0.1" material="groundplane"/>
+
+    <!--
+      Chassis origin is midway between the axles, at wheel-center height.
+      Front axle at local x = +3.25 in, rear axle at local x = -3.25 in.
+      Flat floor only (no stairs). Spawn at x=-1.5, wheel-center height.
+    -->
+    <body name="robot" pos="-1.5 0 0.0508">
+      <freejoint name="root"/>
+      <!--
+        Depth rays, every 2 degrees in the body x-z plane. The source is
+        12 in above the rear axle, 3.25 in behind the body center. Site z-axis
+        is the ray direction.
+        Ray 0 points along +x. The angle increases about +y, so the sweep
+        goes from +x toward -z. Group 1 geoms are the robot, so these rays
+        are aimed at the floor and the stairs.
+      -->
+      <site name="ray_000" pos="-0.08255 0 0.3048" zaxis="1.00000000 0 -0.00000000" size="0.004" group="3"/>
+      <site name="ray_001" pos="-0.08255 0 0.3048" zaxis="0.99939083 0 -0.03489950" size="0.004" group="3"/>
+      <site name="ray_002" pos="-0.08255 0 0.3048" zaxis="0.99756405 0 -0.06975647" size="0.004" group="3"/>
+      <site name="ray_003" pos="-0.08255 0 0.3048" zaxis="0.99452190 0 -0.10452846" size="0.004" group="3"/>
+      <site name="ray_004" pos="-0.08255 0 0.3048" zaxis="0.99026807 0 -0.13917310" size="0.004" group="3"/>
+      <site name="ray_005" pos="-0.08255 0 0.3048" zaxis="0.98480775 0 -0.17364818" size="0.004" group="3"/>
+      <site name="ray_006" pos="-0.08255 0 0.3048" zaxis="0.97814760 0 -0.20791169" size="0.004" group="3"/>
+      <site name="ray_007" pos="-0.08255 0 0.3048" zaxis="0.97029573 0 -0.24192190" size="0.004" group="3"/>
+      <site name="ray_008" pos="-0.08255 0 0.3048" zaxis="0.96126170 0 -0.27563736" size="0.004" group="3"/>
+      <site name="ray_009" pos="-0.08255 0 0.3048" zaxis="0.95105652 0 -0.30901699" size="0.004" group="3"/>
+      <site name="ray_010" pos="-0.08255 0 0.3048" zaxis="0.93969262 0 -0.34202014" size="0.004" group="3"/>
+      <site name="ray_011" pos="-0.08255 0 0.3048" zaxis="0.92718385 0 -0.37460659" size="0.004" group="3"/>
+      <site name="ray_012" pos="-0.08255 0 0.3048" zaxis="0.91354546 0 -0.40673664" size="0.004" group="3"/>
+      <site name="ray_013" pos="-0.08255 0 0.3048" zaxis="0.89879405 0 -0.43837115" size="0.004" group="3"/>
+      <site name="ray_014" pos="-0.08255 0 0.3048" zaxis="0.88294759 0 -0.46947156" size="0.004" group="3"/>
+      <site name="ray_015" pos="-0.08255 0 0.3048" zaxis="0.86602540 0 -0.50000000" size="0.004" group="3"/>
+      <site name="ray_016" pos="-0.08255 0 0.3048" zaxis="0.84804810 0 -0.52991926" size="0.004" group="3"/>
+      <site name="ray_017" pos="-0.08255 0 0.3048" zaxis="0.82903757 0 -0.55919290" size="0.004" group="3"/>
+      <site name="ray_018" pos="-0.08255 0 0.3048" zaxis="0.80901699 0 -0.58778525" size="0.004" group="3"/>
+      <site name="ray_019" pos="-0.08255 0 0.3048" zaxis="0.78801075 0 -0.61566148" size="0.004" group="3"/>
+      <site name="ray_020" pos="-0.08255 0 0.3048" zaxis="0.76604444 0 -0.64278761" size="0.004" group="3"/>
+      <site name="ray_021" pos="-0.08255 0 0.3048" zaxis="0.74314483 0 -0.66913061" size="0.004" group="3"/>
+      <site name="ray_022" pos="-0.08255 0 0.3048" zaxis="0.71933980 0 -0.69465837" size="0.004" group="3"/>
+      <site name="ray_023" pos="-0.08255 0 0.3048" zaxis="0.69465837 0 -0.71933980" size="0.004" group="3"/>
+      <site name="ray_024" pos="-0.08255 0 0.3048" zaxis="0.66913061 0 -0.74314483" size="0.004" group="3"/>
+      <site name="ray_025" pos="-0.08255 0 0.3048" zaxis="0.64278761 0 -0.76604444" size="0.004" group="3"/>
+      <site name="ray_026" pos="-0.08255 0 0.3048" zaxis="0.61566148 0 -0.78801075" size="0.004" group="3"/>
+      <site name="ray_027" pos="-0.08255 0 0.3048" zaxis="0.58778525 0 -0.80901699" size="0.004" group="3"/>
+      <site name="ray_028" pos="-0.08255 0 0.3048" zaxis="0.55919290 0 -0.82903757" size="0.004" group="3"/>
+      <site name="ray_029" pos="-0.08255 0 0.3048" zaxis="0.52991926 0 -0.84804810" size="0.004" group="3"/>
+      <site name="ray_030" pos="-0.08255 0 0.3048" zaxis="0.50000000 0 -0.86602540" size="0.004" group="3"/>
+      <site name="ray_031" pos="-0.08255 0 0.3048" zaxis="0.46947156 0 -0.88294759" size="0.004" group="3"/>
+      <site name="ray_032" pos="-0.08255 0 0.3048" zaxis="0.43837115 0 -0.89879405" size="0.004" group="3"/>
+      <site name="ray_033" pos="-0.08255 0 0.3048" zaxis="0.40673664 0 -0.91354546" size="0.004" group="3"/>
+      <site name="ray_034" pos="-0.08255 0 0.3048" zaxis="0.37460659 0 -0.92718385" size="0.004" group="3"/>
+      <site name="ray_035" pos="-0.08255 0 0.3048" zaxis="0.34202014 0 -0.93969262" size="0.004" group="3"/>
+      <site name="ray_036" pos="-0.08255 0 0.3048" zaxis="0.30901699 0 -0.95105652" size="0.004" group="3"/>
+      <site name="ray_037" pos="-0.08255 0 0.3048" zaxis="0.27563736 0 -0.96126170" size="0.004" group="3"/>
+      <site name="ray_038" pos="-0.08255 0 0.3048" zaxis="0.24192190 0 -0.97029573" size="0.004" group="3"/>
+      <site name="ray_039" pos="-0.08255 0 0.3048" zaxis="0.20791169 0 -0.97814760" size="0.004" group="3"/>
+      <site name="ray_040" pos="-0.08255 0 0.3048" zaxis="0.17364818 0 -0.98480775" size="0.004" group="3"/>
+      <site name="ray_041" pos="-0.08255 0 0.3048" zaxis="0.13917310 0 -0.99026807" size="0.004" group="3"/>
+      <site name="ray_042" pos="-0.08255 0 0.3048" zaxis="0.10452846 0 -0.99452190" size="0.004" group="3"/>
+      <site name="ray_043" pos="-0.08255 0 0.3048" zaxis="0.06975647 0 -0.99756405" size="0.004" group="3"/>
+      <site name="ray_044" pos="-0.08255 0 0.3048" zaxis="0.03489950 0 -0.99939083" size="0.004" group="3"/>
+      <site name="ray_045" pos="-0.08255 0 0.3048" zaxis="0.00000000 0 -1.00000000" size="0.004" group="3"/>
+      <site name="ray_046" pos="-0.08255 0 0.3048" zaxis="-0.03489950 0 -0.99939083" size="0.004" group="3"/>
+      <site name="ray_047" pos="-0.08255 0 0.3048" zaxis="-0.06975647 0 -0.99756405" size="0.004" group="3"/>
+      <site name="ray_048" pos="-0.08255 0 0.3048" zaxis="-0.10452846 0 -0.99452190" size="0.004" group="3"/>
+      <site name="ray_049" pos="-0.08255 0 0.3048" zaxis="-0.13917310 0 -0.99026807" size="0.004" group="3"/>
+      <site name="ray_050" pos="-0.08255 0 0.3048" zaxis="-0.17364818 0 -0.98480775" size="0.004" group="3"/>
+      <site name="ray_051" pos="-0.08255 0 0.3048" zaxis="-0.20791169 0 -0.97814760" size="0.004" group="3"/>
+      <site name="ray_052" pos="-0.08255 0 0.3048" zaxis="-0.24192190 0 -0.97029573" size="0.004" group="3"/>
+      <site name="ray_053" pos="-0.08255 0 0.3048" zaxis="-0.27563736 0 -0.96126170" size="0.004" group="3"/>
+      <site name="ray_054" pos="-0.08255 0 0.3048" zaxis="-0.30901699 0 -0.95105652" size="0.004" group="3"/>
+      <site name="ray_055" pos="-0.08255 0 0.3048" zaxis="-0.34202014 0 -0.93969262" size="0.004" group="3"/>
+      <site name="ray_056" pos="-0.08255 0 0.3048" zaxis="-0.37460659 0 -0.92718385" size="0.004" group="3"/>
+      <site name="ray_057" pos="-0.08255 0 0.3048" zaxis="-0.40673664 0 -0.91354546" size="0.004" group="3"/>
+      <site name="ray_058" pos="-0.08255 0 0.3048" zaxis="-0.43837115 0 -0.89879405" size="0.004" group="3"/>
+      <site name="ray_059" pos="-0.08255 0 0.3048" zaxis="-0.46947156 0 -0.88294759" size="0.004" group="3"/>
+      <site name="ray_060" pos="-0.08255 0 0.3048" zaxis="-0.50000000 0 -0.86602540" size="0.004" group="3"/>
+      <site name="ray_061" pos="-0.08255 0 0.3048" zaxis="-0.52991926 0 -0.84804810" size="0.004" group="3"/>
+      <site name="ray_062" pos="-0.08255 0 0.3048" zaxis="-0.55919290 0 -0.82903757" size="0.004" group="3"/>
+      <site name="ray_063" pos="-0.08255 0 0.3048" zaxis="-0.58778525 0 -0.80901699" size="0.004" group="3"/>
+      <site name="ray_064" pos="-0.08255 0 0.3048" zaxis="-0.61566148 0 -0.78801075" size="0.004" group="3"/>
+      <site name="ray_065" pos="-0.08255 0 0.3048" zaxis="-0.64278761 0 -0.76604444" size="0.004" group="3"/>
+      <site name="ray_066" pos="-0.08255 0 0.3048" zaxis="-0.66913061 0 -0.74314483" size="0.004" group="3"/>
+      <site name="ray_067" pos="-0.08255 0 0.3048" zaxis="-0.69465837 0 -0.71933980" size="0.004" group="3"/>
+      <site name="ray_068" pos="-0.08255 0 0.3048" zaxis="-0.71933980 0 -0.69465837" size="0.004" group="3"/>
+      <site name="ray_069" pos="-0.08255 0 0.3048" zaxis="-0.74314483 0 -0.66913061" size="0.004" group="3"/>
+      <site name="ray_070" pos="-0.08255 0 0.3048" zaxis="-0.76604444 0 -0.64278761" size="0.004" group="3"/>
+      <site name="ray_071" pos="-0.08255 0 0.3048" zaxis="-0.78801075 0 -0.61566148" size="0.004" group="3"/>
+      <site name="ray_072" pos="-0.08255 0 0.3048" zaxis="-0.80901699 0 -0.58778525" size="0.004" group="3"/>
+      <site name="ray_073" pos="-0.08255 0 0.3048" zaxis="-0.82903757 0 -0.55919290" size="0.004" group="3"/>
+      <site name="ray_074" pos="-0.08255 0 0.3048" zaxis="-0.84804810 0 -0.52991926" size="0.004" group="3"/>
+      <site name="ray_075" pos="-0.08255 0 0.3048" zaxis="-0.86602540 0 -0.50000000" size="0.004" group="3"/>
+      <site name="ray_076" pos="-0.08255 0 0.3048" zaxis="-0.88294759 0 -0.46947156" size="0.004" group="3"/>
+      <site name="ray_077" pos="-0.08255 0 0.3048" zaxis="-0.89879405 0 -0.43837115" size="0.004" group="3"/>
+      <site name="ray_078" pos="-0.08255 0 0.3048" zaxis="-0.91354546 0 -0.40673664" size="0.004" group="3"/>
+      <site name="ray_079" pos="-0.08255 0 0.3048" zaxis="-0.92718385 0 -0.37460659" size="0.004" group="3"/>
+      <site name="ray_080" pos="-0.08255 0 0.3048" zaxis="-0.93969262 0 -0.34202014" size="0.004" group="3"/>
+      <site name="ray_081" pos="-0.08255 0 0.3048" zaxis="-0.95105652 0 -0.30901699" size="0.004" group="3"/>
+      <site name="ray_082" pos="-0.08255 0 0.3048" zaxis="-0.96126170 0 -0.27563736" size="0.004" group="3"/>
+      <site name="ray_083" pos="-0.08255 0 0.3048" zaxis="-0.97029573 0 -0.24192190" size="0.004" group="3"/>
+      <site name="ray_084" pos="-0.08255 0 0.3048" zaxis="-0.97814760 0 -0.20791169" size="0.004" group="3"/>
+      <site name="ray_085" pos="-0.08255 0 0.3048" zaxis="-0.98480775 0 -0.17364818" size="0.004" group="3"/>
+      <site name="ray_086" pos="-0.08255 0 0.3048" zaxis="-0.99026807 0 -0.13917310" size="0.004" group="3"/>
+      <site name="ray_087" pos="-0.08255 0 0.3048" zaxis="-0.99452190 0 -0.10452846" size="0.004" group="3"/>
+      <site name="ray_088" pos="-0.08255 0 0.3048" zaxis="-0.99756405 0 -0.06975647" size="0.004" group="3"/>
+      <site name="ray_089" pos="-0.08255 0 0.3048" zaxis="-0.99939083 0 -0.03489950" size="0.004" group="3"/>
+      <site name="ray_090" pos="-0.08255 0 0.3048" zaxis="-1.00000000 0 -0.00000000" size="0.004" group="3"/>
+      <site name="ray_091" pos="-0.08255 0 0.3048" zaxis="-0.99939083 0 0.03489950" size="0.004" group="3"/>
+      <site name="ray_092" pos="-0.08255 0 0.3048" zaxis="-0.99756405 0 0.06975647" size="0.004" group="3"/>
+      <site name="ray_093" pos="-0.08255 0 0.3048" zaxis="-0.99452190 0 0.10452846" size="0.004" group="3"/>
+      <site name="ray_094" pos="-0.08255 0 0.3048" zaxis="-0.99026807 0 0.13917310" size="0.004" group="3"/>
+      <site name="ray_095" pos="-0.08255 0 0.3048" zaxis="-0.98480775 0 0.17364818" size="0.004" group="3"/>
+      <site name="ray_096" pos="-0.08255 0 0.3048" zaxis="-0.97814760 0 0.20791169" size="0.004" group="3"/>
+      <site name="ray_097" pos="-0.08255 0 0.3048" zaxis="-0.97029573 0 0.24192190" size="0.004" group="3"/>
+      <site name="ray_098" pos="-0.08255 0 0.3048" zaxis="-0.96126170 0 0.27563736" size="0.004" group="3"/>
+      <site name="ray_099" pos="-0.08255 0 0.3048" zaxis="-0.95105652 0 0.30901699" size="0.004" group="3"/>
+      <site name="ray_100" pos="-0.08255 0 0.3048" zaxis="-0.93969262 0 0.34202014" size="0.004" group="3"/>
+      <site name="ray_101" pos="-0.08255 0 0.3048" zaxis="-0.92718385 0 0.37460659" size="0.004" group="3"/>
+      <site name="ray_102" pos="-0.08255 0 0.3048" zaxis="-0.91354546 0 0.40673664" size="0.004" group="3"/>
+      <site name="ray_103" pos="-0.08255 0 0.3048" zaxis="-0.89879405 0 0.43837115" size="0.004" group="3"/>
+      <site name="ray_104" pos="-0.08255 0 0.3048" zaxis="-0.88294759 0 0.46947156" size="0.004" group="3"/>
+      <site name="ray_105" pos="-0.08255 0 0.3048" zaxis="-0.86602540 0 0.50000000" size="0.004" group="3"/>
+      <site name="ray_106" pos="-0.08255 0 0.3048" zaxis="-0.84804810 0 0.52991926" size="0.004" group="3"/>
+      <site name="ray_107" pos="-0.08255 0 0.3048" zaxis="-0.82903757 0 0.55919290" size="0.004" group="3"/>
+      <site name="ray_108" pos="-0.08255 0 0.3048" zaxis="-0.80901699 0 0.58778525" size="0.004" group="3"/>
+      <site name="ray_109" pos="-0.08255 0 0.3048" zaxis="-0.78801075 0 0.61566148" size="0.004" group="3"/>
+      <site name="ray_110" pos="-0.08255 0 0.3048" zaxis="-0.76604444 0 0.64278761" size="0.004" group="3"/>
+      <site name="ray_111" pos="-0.08255 0 0.3048" zaxis="-0.74314483 0 0.66913061" size="0.004" group="3"/>
+      <site name="ray_112" pos="-0.08255 0 0.3048" zaxis="-0.71933980 0 0.69465837" size="0.004" group="3"/>
+      <site name="ray_113" pos="-0.08255 0 0.3048" zaxis="-0.69465837 0 0.71933980" size="0.004" group="3"/>
+      <site name="ray_114" pos="-0.08255 0 0.3048" zaxis="-0.66913061 0 0.74314483" size="0.004" group="3"/>
+      <site name="ray_115" pos="-0.08255 0 0.3048" zaxis="-0.64278761 0 0.76604444" size="0.004" group="3"/>
+      <site name="ray_116" pos="-0.08255 0 0.3048" zaxis="-0.61566148 0 0.78801075" size="0.004" group="3"/>
+      <site name="ray_117" pos="-0.08255 0 0.3048" zaxis="-0.58778525 0 0.80901699" size="0.004" group="3"/>
+      <site name="ray_118" pos="-0.08255 0 0.3048" zaxis="-0.55919290 0 0.82903757" size="0.004" group="3"/>
+      <site name="ray_119" pos="-0.08255 0 0.3048" zaxis="-0.52991926 0 0.84804810" size="0.004" group="3"/>
+      <site name="ray_120" pos="-0.08255 0 0.3048" zaxis="-0.50000000 0 0.86602540" size="0.004" group="3"/>
+      <site name="ray_121" pos="-0.08255 0 0.3048" zaxis="-0.46947156 0 0.88294759" size="0.004" group="3"/>
+      <site name="ray_122" pos="-0.08255 0 0.3048" zaxis="-0.43837115 0 0.89879405" size="0.004" group="3"/>
+      <site name="ray_123" pos="-0.08255 0 0.3048" zaxis="-0.40673664 0 0.91354546" size="0.004" group="3"/>
+      <site name="ray_124" pos="-0.08255 0 0.3048" zaxis="-0.37460659 0 0.92718385" size="0.004" group="3"/>
+      <site name="ray_125" pos="-0.08255 0 0.3048" zaxis="-0.34202014 0 0.93969262" size="0.004" group="3"/>
+      <site name="ray_126" pos="-0.08255 0 0.3048" zaxis="-0.30901699 0 0.95105652" size="0.004" group="3"/>
+      <site name="ray_127" pos="-0.08255 0 0.3048" zaxis="-0.27563736 0 0.96126170" size="0.004" group="3"/>
+      <site name="ray_128" pos="-0.08255 0 0.3048" zaxis="-0.24192190 0 0.97029573" size="0.004" group="3"/>
+      <site name="ray_129" pos="-0.08255 0 0.3048" zaxis="-0.20791169 0 0.97814760" size="0.004" group="3"/>
+      <site name="ray_130" pos="-0.08255 0 0.3048" zaxis="-0.17364818 0 0.98480775" size="0.004" group="3"/>
+      <site name="ray_131" pos="-0.08255 0 0.3048" zaxis="-0.13917310 0 0.99026807" size="0.004" group="3"/>
+      <site name="ray_132" pos="-0.08255 0 0.3048" zaxis="-0.10452846 0 0.99452190" size="0.004" group="3"/>
+      <site name="ray_133" pos="-0.08255 0 0.3048" zaxis="-0.06975647 0 0.99756405" size="0.004" group="3"/>
+      <site name="ray_134" pos="-0.08255 0 0.3048" zaxis="-0.03489950 0 0.99939083" size="0.004" group="3"/>
+      <site name="ray_135" pos="-0.08255 0 0.3048" zaxis="-0.00000000 0 1.00000000" size="0.004" group="3"/>
+      <site name="ray_136" pos="-0.08255 0 0.3048" zaxis="0.03489950 0 0.99939083" size="0.004" group="3"/>
+      <site name="ray_137" pos="-0.08255 0 0.3048" zaxis="0.06975647 0 0.99756405" size="0.004" group="3"/>
+      <site name="ray_138" pos="-0.08255 0 0.3048" zaxis="0.10452846 0 0.99452190" size="0.004" group="3"/>
+      <site name="ray_139" pos="-0.08255 0 0.3048" zaxis="0.13917310 0 0.99026807" size="0.004" group="3"/>
+      <site name="ray_140" pos="-0.08255 0 0.3048" zaxis="0.17364818 0 0.98480775" size="0.004" group="3"/>
+      <site name="ray_141" pos="-0.08255 0 0.3048" zaxis="0.20791169 0 0.97814760" size="0.004" group="3"/>
+      <site name="ray_142" pos="-0.08255 0 0.3048" zaxis="0.24192190 0 0.97029573" size="0.004" group="3"/>
+      <site name="ray_143" pos="-0.08255 0 0.3048" zaxis="0.27563736 0 0.96126170" size="0.004" group="3"/>
+      <site name="ray_144" pos="-0.08255 0 0.3048" zaxis="0.30901699 0 0.95105652" size="0.004" group="3"/>
+      <site name="ray_145" pos="-0.08255 0 0.3048" zaxis="0.34202014 0 0.93969262" size="0.004" group="3"/>
+      <site name="ray_146" pos="-0.08255 0 0.3048" zaxis="0.37460659 0 0.92718385" size="0.004" group="3"/>
+      <site name="ray_147" pos="-0.08255 0 0.3048" zaxis="0.40673664 0 0.91354546" size="0.004" group="3"/>
+      <site name="ray_148" pos="-0.08255 0 0.3048" zaxis="0.43837115 0 0.89879405" size="0.004" group="3"/>
+      <site name="ray_149" pos="-0.08255 0 0.3048" zaxis="0.46947156 0 0.88294759" size="0.004" group="3"/>
+      <site name="ray_150" pos="-0.08255 0 0.3048" zaxis="0.50000000 0 0.86602540" size="0.004" group="3"/>
+      <site name="ray_151" pos="-0.08255 0 0.3048" zaxis="0.52991926 0 0.84804810" size="0.004" group="3"/>
+      <site name="ray_152" pos="-0.08255 0 0.3048" zaxis="0.55919290 0 0.82903757" size="0.004" group="3"/>
+      <site name="ray_153" pos="-0.08255 0 0.3048" zaxis="0.58778525 0 0.80901699" size="0.004" group="3"/>
+      <site name="ray_154" pos="-0.08255 0 0.3048" zaxis="0.61566148 0 0.78801075" size="0.004" group="3"/>
+      <site name="ray_155" pos="-0.08255 0 0.3048" zaxis="0.64278761 0 0.76604444" size="0.004" group="3"/>
+      <site name="ray_156" pos="-0.08255 0 0.3048" zaxis="0.66913061 0 0.74314483" size="0.004" group="3"/>
+      <site name="ray_157" pos="-0.08255 0 0.3048" zaxis="0.69465837 0 0.71933980" size="0.004" group="3"/>
+      <site name="ray_158" pos="-0.08255 0 0.3048" zaxis="0.71933980 0 0.69465837" size="0.004" group="3"/>
+      <site name="ray_159" pos="-0.08255 0 0.3048" zaxis="0.74314483 0 0.66913061" size="0.004" group="3"/>
+      <site name="ray_160" pos="-0.08255 0 0.3048" zaxis="0.76604444 0 0.64278761" size="0.004" group="3"/>
+      <site name="ray_161" pos="-0.08255 0 0.3048" zaxis="0.78801075 0 0.61566148" size="0.004" group="3"/>
+      <site name="ray_162" pos="-0.08255 0 0.3048" zaxis="0.80901699 0 0.58778525" size="0.004" group="3"/>
+      <site name="ray_163" pos="-0.08255 0 0.3048" zaxis="0.82903757 0 0.55919290" size="0.004" group="3"/>
+      <site name="ray_164" pos="-0.08255 0 0.3048" zaxis="0.84804810 0 0.52991926" size="0.004" group="3"/>
+      <site name="ray_165" pos="-0.08255 0 0.3048" zaxis="0.86602540 0 0.50000000" size="0.004" group="3"/>
+      <site name="ray_166" pos="-0.08255 0 0.3048" zaxis="0.88294759 0 0.46947156" size="0.004" group="3"/>
+      <site name="ray_167" pos="-0.08255 0 0.3048" zaxis="0.89879405 0 0.43837115" size="0.004" group="3"/>
+      <site name="ray_168" pos="-0.08255 0 0.3048" zaxis="0.91354546 0 0.40673664" size="0.004" group="3"/>
+      <site name="ray_169" pos="-0.08255 0 0.3048" zaxis="0.92718385 0 0.37460659" size="0.004" group="3"/>
+      <site name="ray_170" pos="-0.08255 0 0.3048" zaxis="0.93969262 0 0.34202014" size="0.004" group="3"/>
+      <site name="ray_171" pos="-0.08255 0 0.3048" zaxis="0.95105652 0 0.30901699" size="0.004" group="3"/>
+      <site name="ray_172" pos="-0.08255 0 0.3048" zaxis="0.96126170 0 0.27563736" size="0.004" group="3"/>
+      <site name="ray_173" pos="-0.08255 0 0.3048" zaxis="0.97029573 0 0.24192190" size="0.004" group="3"/>
+      <site name="ray_174" pos="-0.08255 0 0.3048" zaxis="0.97814760 0 0.20791169" size="0.004" group="3"/>
+      <site name="ray_175" pos="-0.08255 0 0.3048" zaxis="0.98480775 0 0.17364818" size="0.004" group="3"/>
+      <site name="ray_176" pos="-0.08255 0 0.3048" zaxis="0.99026807 0 0.13917310" size="0.004" group="3"/>
+      <site name="ray_177" pos="-0.08255 0 0.3048" zaxis="0.99452190 0 0.10452846" size="0.004" group="3"/>
+      <site name="ray_178" pos="-0.08255 0 0.3048" zaxis="0.99756405 0 0.06975647" size="0.004" group="3"/>
+      <site name="ray_179" pos="-0.08255 0 0.3048" zaxis="0.99939083 0 0.03489950" size="0.004" group="3"/>
+      <geom name="chassis" group="1" type="capsule" material="chassis" mass="0.9" size="0.00635" fromto="-0.08255 0 0 0.08255 0 0"/>
+      <!-- Orientation: front marker (+x / stairs), sphere = rear (-x). Visual only.
+           MuJoCo has no cone geom — cylinder stands in for the tip marker. -->
+      <geom name="front_marker" type="cylinder" size="0.028 0.04" pos="0.145 0 0.06"
+        quat="0.70710678 0 0.70710678 0" rgba="0.2 0.9 0.35 1" contype="0" conaffinity="0" group="1"/>
+      <geom name="back_marker" type="sphere" size="0.032" pos="-0.145 0 0.06"
+        rgba="0.9 0.3 0.2 1" contype="0" conaffinity="0" group="1"/>
+
+      <body name="front_left_mecanum_wheel" pos="0.08255 -0.1397 0">
+        <joint name="front_left_axle" type="hinge" axis="0 1 0"/>
+        <geom name="front_left_mecanum_wheel" group="1" type="capsule" material="wheel" mass="1.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
+      </body>
+      <body name="front_right_mecanum_wheel" pos="0.08255 0.1397 0">
+        <joint name="front_right_axle" type="hinge" axis="0 1 0"/>
+        <geom name="front_right_mecanum_wheel" group="1" type="capsule" material="wheel" mass="1.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
+      </body>
+
+      <body name="rear_left_mecanum_wheel" pos="-0.08255 -0.1397 0">
+        <joint name="rear_left_axle" type="hinge" axis="0 1 0"/>
+        <geom name="rear_left_mecanum_wheel" group="1" type="capsule" material="wheel" mass="0.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
+      </body>
+      <body name="rear_right_mecanum_wheel" pos="-0.08255 0.1397 0">
+        <joint name="rear_right_axle" type="hinge" axis="0 1 0"/>
+        <geom name="rear_right_mecanum_wheel" group="1" type="capsule" material="wheel" mass="0.3" size="0.0508" fromto="0 -0.0381 0 0 0.0381 0" friction="0.6 0.01 0.001"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <!--
+    Each half of an axle has its own velocity actuator. Both halves are
+    commanded at the same speed. Positive command rolls that wheel toward the stairs.
+    Control is wheel speed in rad/s, limited to ±100 rpm (~±10.472). No forcerange on
+    the wheels (MuJoCo unlimited torque). Chassis only — no leg actuators.
+  -->
+  <actuator>
+    <velocity name="front_left_mecanum_wheel" joint="front_left_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
+    <velocity name="front_right_mecanum_wheel" joint="front_right_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
+    <velocity name="rear_left_mecanum_wheel" joint="rear_left_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
+    <velocity name="rear_right_mecanum_wheel" joint="rear_right_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
+  </actuator>
+
+  <!-- Home: free pose + wheels at 0. -->
+  <keyframe>
+    <key name="home"
+      qpos="-1.5 0 0.0508 1 0 0 0 0 0 0 0"
+      ctrl="0 0 0 0"/>
+  </keyframe>
+
+  <sensor>
+  </sensor>
+</mujoco>
