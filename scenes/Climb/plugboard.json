@@ -3,199 +3,169 @@
   "microcontrollers": {
     "0": {
       "motor_control": {
-        "msgtype": "outgoing",
+        "type": "outgoing",
         "cmdid": 0,
-        "body": [
-          {
-            "name": "front_left_wheel",
-            "dtype": "int8"
+        "body": {
+          "front_left_wheel": {
+            "dtype": "int8",
+            "min_limit": -100,
+            "max_limit": 100
           },
-          {
-            "name": "front_right_wheel",
-            "dtype": "int8"
+          "front_right_wheel": {
+            "dtype": "int8",
+            "min_limit": -100,
+            "max_limit": 100
           },
-          {
-            "name": "rear_left_wheel",
-            "dtype": "int8"
+          "rear_left_wheel": {
+            "dtype": "int8",
+            "min_limit": -100,
+            "max_limit": 100
           },
-          {
-            "name": "rear_right_wheel",
-            "dtype": "int8"
+          "rear_right_wheel": {
+            "dtype": "int8",
+            "min_limit": -100,
+            "max_limit": 100
           },
-          {
-            "name": "J1",
-            "dtype": "uint16"
+          "J1": {
+            "dtype": "uint16",
+            "min_limit": 981,
+            "max_limit": 3029
           },
-          {
-            "name": "J2",
-            "dtype": "uint16"
+          "J2": {
+            "dtype": "uint16",
+            "min_limit": 1207,
+            "max_limit": 3084
           },
-          {
-            "name": "J3",
-            "dtype": "uint16"
+          "J3": {
+            "dtype": "uint16",
+            "min_limit": 1070,
+            "max_limit": 2834
           }
-        ]
+        }
       },
       "sensor_data": {
-        "msgtype": "incoming",
+        "type": "incoming",
         "responseid": 0,
-        "body": [
-          {
-            "name": "J1",
+        "body": {
+          "J1": {
             "dtype": "uint16",
-            "count": 1
+            "count": 1,
+            "min_limit": 981,
+            "max_limit": 3029
           },
-          {
-            "name": "J2",
+          "J2": {
             "dtype": "uint16",
-            "count": 1
+            "count": 1,
+            "min_limit": 1207,
+            "max_limit": 3084
           },
-          {
-            "name": "J3",
+          "J3": {
             "dtype": "uint16",
-            "count": 1
+            "count": 1,
+            "min_limit": 1070,
+            "max_limit": 2834
           },
-          {
-            "name": "J1_secondary",
-            "dtype": "int32"
+          "J1_secondary": {
+            "dtype": "int32",
+            "min_limit": -2147483648,
+            "max_limit": 2147483647
           },
-          {
-            "name": "J2_secondary",
-            "dtype": "int32"
+          "J2_secondary": {
+            "dtype": "int32",
+            "min_limit": -2147483648,
+            "max_limit": 2147483647
           },
-          {
-            "name": "J3_secondary",
-            "dtype": "int32"
+          "J3_secondary": {
+            "dtype": "int32",
+            "min_limit": -2147483648,
+            "max_limit": 2147483647
           }
-        ]
+        }
       }
     }
   },
-  "mujoco": {
-    "actuators": {
+  "skills": {
+    "climb": {
+      "enabled": true,
+      "input_output": [
+        "front_left_wheel",
+        "front_right_wheel",
+        "rear_left_wheel",
+        "rear_right_wheel",
+        "J1",
+        "J2",
+        "J3"
+      ],
+      "gamepad": "generic",
+      "script": "climb.js",
+      "gauge": {
+        "height": {
+          "type": "position",
+          "displayMode": "slider",
+          "min_limit": 2.06,
+          "max_limit": 10.7
+        },
+        "forward": {
+          "type": "position",
+          "displayMode": "slider",
+          "min_limit": 1.05,
+          "max_limit": 11.6
+        }
+      }
+    }
+  },
+  "interface": {
+    "control": {
       "front_left_wheel": {
-        "physical": {
-          "range": [
-            -100,
-            100
-          ]
-        },
-        "simulation": {
-          "range": [
-            -5,
-            5
-          ]
-        },
         "type": "velocity",
+        "min_limit": -5,
+        "max_limit": 5,
         "showVelocityReading": false
       },
       "front_right_wheel": {
-        "physical": {
-          "range": [
-            -100,
-            100
-          ]
-        },
-        "simulation": {
-          "range": [
-            -5,
-            5
-          ]
-        },
         "type": "velocity",
+        "min_limit": -5,
+        "max_limit": 5,
         "showVelocityReading": false
       },
       "rear_left_wheel": {
-        "physical": {
-          "range": [
-            -100,
-            100
-          ]
-        },
-        "simulation": {
-          "range": [
-            -5,
-            5
-          ]
-        },
         "type": "velocity",
+        "min_limit": -5,
+        "max_limit": 5,
         "showVelocityReading": false
       },
       "rear_right_wheel": {
-        "physical": {
-          "range": [
-            -100,
-            100
-          ]
-        },
-        "simulation": {
-          "range": [
-            -5,
-            5
-          ]
-        },
         "type": "velocity",
+        "min_limit": -5,
+        "max_limit": 5,
         "showVelocityReading": false
       },
       "J1": {
-        "physical": {
-          "range": [
-            981,
-            3029
-          ]
-        },
-        "simulation": {
-          "range": [
-            -90,
-            90
-          ]
-        },
         "type": "position",
+        "min_limit": -90,
+        "max_limit": 90,
         "displayStyle": "dial",
         "secondary": {
-          "name": "J1_secondary",
-          "dtype": "int32"
+          "name": "J1_secondary"
         }
       },
       "J2": {
-        "physical": {
-          "range": [
-            1207,
-            3084
-          ]
-        },
-        "simulation": {
-          "range": [
-            0,
-            165
-          ]
-        },
         "type": "position",
+        "min_limit": 0,
+        "max_limit": 165,
         "invert": true,
         "displayStyle": "dial",
         "secondary": {
-          "name": "J2_secondary",
-          "dtype": "int32"
+          "name": "J2_secondary"
         }
       },
       "J3": {
-        "physical": {
-          "range": [
-            1070,
-            2834
-          ]
-        },
-        "simulation": {
-          "range": [
-            0,
-            155
-          ]
-        },
         "type": "position",
+        "min_limit": 0,
+        "max_limit": 155,
         "displayStyle": "dial",
         "secondary": {
-          "name": "J3_secondary",
-          "dtype": "int32"
+          "name": "J3_secondary"
         }
       }
     },
@@ -232,34 +202,6 @@
       },
       "foot_bottom": {
         "ignore": true
-      }
-    }
-  },
-  "skills": {
-    "climb": {
-      "enabled": true,
-      "input_output": [
-        "front_left_wheel",
-        "front_right_wheel",
-        "rear_left_wheel",
-        "rear_right_wheel",
-        "J1",
-        "J2",
-        "J3"
-      ],
-      "gamepad": "generic",
-      "script": "climb.js",
-      "gauge": {
-        "height": {
-          "type": "position",
-          "simulation": { "range": [2.06, 10.7] },
-          "displayMode": "slider"
-        },
-        "forward": {
-          "type": "position",
-          "simulation": { "range": [1.05, 11.6] },
-          "displayMode": "slider"
-        }
       }
     }
   }
