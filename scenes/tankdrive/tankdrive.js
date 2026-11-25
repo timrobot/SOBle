@@ -23,6 +23,18 @@ function wheelsFromGamepad(gamepad) {
   }
   const lx = gamepad.lx ?? 0
   const fwd = -(gamepad.ly ?? 0)
+  // Virtual mobile gamepad (no right stick): -ly = forward, lx = yaw turn (right = CW).
+  // In scene.xml, *_left wheels sit at y = -0.1397 (physical right) and *_right at y = +0.1397 (physical left).
+  if ('screenx' in gamepad && !('rx' in gamepad)) {
+    const rightSide = clamp((fwd - lx) * WHEEL_RAD_S, -WHEEL_RAD_S, WHEEL_RAD_S)
+    const leftSide = clamp((fwd + lx) * WHEEL_RAD_S, -WHEEL_RAD_S, WHEEL_RAD_S)
+    return {
+      front_left_mecanum_wheel: rightSide,
+      front_right_mecanum_wheel: leftSide,
+      rear_left_mecanum_wheel: rightSide,
+      rear_right_mecanum_wheel: leftSide,
+    }
+  }
   const rx = gamepad.rx ?? 0
   return {
     front_left_mecanum_wheel: clamp((lx + fwd + rx) * WHEEL_RAD_S, -WHEEL_RAD_S, WHEEL_RAD_S),

@@ -96,20 +96,20 @@
         "J2",
         "J3"
       ],
-      "gamepad": "generic",
+      "gamepad": "mobile",
       "script": "climb.js",
       "gauge": {
         "height": {
           "type": "position",
           "displayMode": "slider",
-          "min_limit": 2.06,
-          "max_limit": 10.7
+          "min_limit": 2.05,
+          "max_limit": 10.4
         },
         "forward": {
           "type": "position",
           "displayMode": "slider",
-          "min_limit": 1.05,
-          "max_limit": 11.6
+          "min_limit": 1.07,
+          "max_limit": 11.66
         }
       }
     }
@@ -118,26 +118,26 @@
     "control": {
       "front_left_mecanum_wheel": {
         "type": "velocity",
-        "min_limit": -10.472,
-        "max_limit": 10.472,
+        "min_limit": -7.854,
+        "max_limit": 7.854,
         "showVelocityReading": false
       },
       "front_right_mecanum_wheel": {
         "type": "velocity",
-        "min_limit": -10.472,
-        "max_limit": 10.472,
+        "min_limit": -7.854,
+        "max_limit": 7.854,
         "showVelocityReading": false
       },
       "rear_left_mecanum_wheel": {
         "type": "velocity",
-        "min_limit": -10.472,
-        "max_limit": 10.472,
+        "min_limit": -7.854,
+        "max_limit": 7.854,
         "showVelocityReading": false
       },
       "rear_right_mecanum_wheel": {
         "type": "velocity",
-        "min_limit": -10.472,
-        "max_limit": 10.472,
+        "min_limit": -7.854,
+        "max_limit": 7.854,
         "showVelocityReading": false
       },
       "J1": {

@@ -333,12 +333,12 @@
       </body>
 
       <!--
-        J1 is 0.241260 in behind the rear axle and 1.875984 in above it.
+        J1 is 0.32 in behind the rear axle and 1.875984 in above it.
         Zero points along -x. Positive rotation lowers the link. J2's zero
         continues J1. The foot box runs 8.25 in from J3, and its frame is turned
         so +z is up when the foot is parallel to the body.
       -->
-      <body name="L1" pos="-0.088678 0 0.04765">
+      <body name="L1" pos="-0.090678 0 0.04765">
         <joint name="J1" type="hinge" axis="0 -1 0" range="-90 90" damping="1"/>
         <geom name="motor_j1" group="1" type="cylinder" material="leg" mass="0.8" size="0.0275 0.04026075" quat="0.707106781 0.707106781 0 0" contype="0" conaffinity="0"/>
         <geom name="L1" group="1" type="box" material="leg" mass="0.15" pos="-0.09525 0 0" size="0.09525 0.02875 0.0275"/>
@@ -380,26 +380,26 @@
   <!--
     Each half of an axle has its own velocity actuator. Both halves are
     commanded at the same speed. Positive command rolls that wheel toward the stairs.
-    Control is wheel speed in rad/s, limited to ±100 rpm (~±10.472). No forcerange on
-    the wheels (MuJoCo unlimited torque). J1–J3 position servos use forcerange ±40 Nm.
+    Control is wheel speed in rad/s, limited to ±75 rpm. Torque is limited to ±5 Nm.
+    J1–J3 position servos use forcerange ±40 Nm.
     The gain is high because the hardware PID holds the commanded angle. J3 is set from
     the current J1 and J2 so the foot stays parallel to the body.
   -->
   <actuator>
-    <velocity name="front_left_mecanum_wheel" joint="front_left_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
-    <velocity name="front_right_mecanum_wheel" joint="front_right_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
-    <velocity name="rear_left_mecanum_wheel" joint="rear_left_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
-    <velocity name="rear_right_mecanum_wheel" joint="rear_right_axle" kv="1" ctrlrange="-10.47197551 10.47197551"/>
+    <velocity name="front_left_mecanum_wheel" joint="front_left_axle" kv="1" ctrlrange="-7.85398163 7.85398163" forcerange="-5 5"/>
+    <velocity name="front_right_mecanum_wheel" joint="front_right_axle" kv="1" ctrlrange="-7.85398163 7.85398163" forcerange="-5 5"/>
+    <velocity name="rear_left_mecanum_wheel" joint="rear_left_axle" kv="1" ctrlrange="-7.85398163 7.85398163" forcerange="-5 5"/>
+    <velocity name="rear_right_mecanum_wheel" joint="rear_right_axle" kv="1" ctrlrange="-7.85398163 7.85398163" forcerange="-5 5"/>
     <position name="J1" joint="J1" kp="2000" dampratio="1" ctrlrange="-1.5707963 1.5707963" forcerange="-40 40"/>
     <position name="J2" joint="J2" kp="2000" dampratio="1" ctrlrange="0 2.8797933" forcerange="-40 40"/>
     <position name="J3" joint="J3" kp="2000" dampratio="1" ctrlrange="0 2.7052603" forcerange="-40 40"/>
   </actuator>
 
-  <!-- Home: J1=-45°, J2=165°, J3=30°. -->
+  <!-- Home: J1≈-45.4°, J2≈165°, J3≈60.5° (2.05 in drop, 1.07 in behind the hip). -->
   <keyframe>
     <key name="home"
-      qpos="-0.23495 0 0.0508 1 0 0 0 0 0 0 0 -0.78539816 2.87979327 0.52359878"
-      ctrl="0 0 0 0 -0.78539816 2.87979327 0.52359878"/>
+      qpos="-0.23495 0 0.0508 1 0 0 0 0 0 0 0 -0.79320807 2.87970410 1.05509662"
+      ctrl="0 0 0 0 -0.79320807 2.87970410 1.05509662"/>
   </keyframe>
 
   <sensor>
